@@ -257,57 +257,11 @@ function switchTab(i) {
 // ══════════════════════════════════════════════════════════════
 // 데이터 fetch (다중 프록시 폴백)
 // ══════════════════════════════════════════════════════════════
-const PROXIES = [
-  u=>`https://corsproxy.io/?${encodeURIComponent(u)}`,
-  u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-];
-
-async function fetchJSON(targetUrl) {
-  for(const proxy of PROXIES){
-    try{
-      const r=await fetch(proxy(targetUrl),{signal:AbortSignal.timeout(10000)});
-      if(!r.ok) continue;
-      return await r.json();
-    }catch{continue;}
-  }
-  return null;
-}
-
-async function fetchQuote(symbol) {
-  const range = symbol==='^VIX'?'3mo':'1y';
-  const url=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d&includePrePost=false`;
-  const json=await fetchJSON(url);
-  const result=json?.chart?.result?.[0];
-  if(!result) return null;
-  const closes=(result.indicators?.quote?.[0]?.close??[]).filter(v=>v!=null);
-  const current=closes[closes.length-1];
-  if(!current) return null;
-  const ma200arr=closes.slice(-200);
-  const ma200=ma200arr.reduce((a,b)=>a+b,0)/ma200arr.length;
-  const timestamps=result.timestamp??[];
-  const yr=new Date().getFullYear();
-  let ytdBase=null;
-  for(let i=0;i<timestamps.length;i++){if(new Date(timestamps[i]*1000).getFullYear()===yr){ytdBase=closes[i];break;}}
-  const ytd=ytdBase?((current-ytdBase)/ytdBase*100):null;
-  const meta=result.meta??{};
-  const history=closes.slice(-7).map((v,i,arr)=>{
-    const ts=timestamps.slice(-arr.length)[i];
-    const d=ts?new Date(ts*1000):new Date();
-    return{date:`${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`,val:parseFloat(v.toFixed(3))};
-  });
-  return{
-    current:parseFloat(current.toFixed(2)),
-    ma200:parseFloat(ma200.toFixed(2)),
-    ytd:ytd?parseFloat(ytd.toFixed(1)):null,
-    high52:parseFloat((meta.fiftyTwoWeekHigh??Math.max(...closes)).toFixed(2)),
-    low52:parseFloat((meta.fiftyTwoWeekLow??Math.min(...closes)).toFixed(2)),
-    history
-  };
-}
-
-async function fetchFG() {
-  const json=await fetchJSON('https://production.dataviz.cnn.io/index/fearandgreed/graphdata');
-  return json?Math.round(json.fear_and_greed?.score??15):null;
+// Vercel 서버리스 /api/quote 에서 한번에 가져옴 (CORS 없음)
+async function fetchAllData() {
+  const r = await fetch('/api/quote', {signal: AbortSignal.timeout(25000)});
+  if (!r.ok) throw new Error('API ' + r.status);
+  return r.json();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -321,27 +275,21 @@ let D={}, FG=null;
 async function loadData() {
   document.getElementById('live-badge').className='err-badge';
   document.getElementById('live-badge').textContent='⟳ 로딩 중...';
-
-  const [sp500,ndx,tqqq,fngu,soxl,vix,gold,tnx,fg]=await Promise.all([
-    fetchQuote('^GSPC'),fetchQuote('^NDX'),fetchQuote('TQQQ'),
-    fetchQuote('FNGU'),fetchQuote('SOXL'),fetchQuote('^VIX'),
-    fetchQuote('GLD'),fetchQuote('^TNX'),fetchFG()
-  ]);
-
-  D={sp500,ndx,tqqq,fngu,soxl,vix,gold,tnx};
-  FG=fg;
-
-  document.getElementById('update-time').textContent=nowStr();
-
-  if(sp500||ndx||tqqq){
+  try {
+    const data = await fetchAllData();
+    D={sp500:data.sp500,ndx:data.ndx,tqqq:data.tqqq,
+       fngu:data.fngu,soxl:data.soxl,vix:data.vix,
+       gold:data.gold,tnx:data.tnx};
+    FG=data.fg;
+    document.getElementById('update-time').textContent=nowStr();
     document.getElementById('live-badge').className='live-badge';
     document.getElementById('live-badge').innerHTML='<span class="ldot" style="margin:0"></span> LIVE';
-  } else {
+  } catch(e) {
+    console.error(e);
     document.getElementById('live-badge').className='err-badge';
-    document.getElementById('live-badge').textContent='⚠️ 데이터 오류 — 재시도';
+    document.getElementById('live-badge').textContent='⚠️ 오류 — 재시도 클릭';
     document.getElementById('live-badge').onclick=loadData;
   }
-
   renderT1();
   calcSim();
   renderT3();
