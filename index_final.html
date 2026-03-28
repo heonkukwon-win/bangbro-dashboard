@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>BangBro Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --nv:#0D1B2E;--nv2:#152236;--nv3:#1E3350;
+  --go:#C9943A;--gL:#F0C060;
+  --re:#E53E3E;--rL:#FCA5A5;
+  --gr:#22C55E;--gR:#86EFAC;
+  --or:#F97316;--bl:#3B82F6;
+  --gy:#64748B;--gY:#94A3B8;--gZ:#CBD5E1;
+  --wh:#F8FAFC;--bd:rgba(255,255,255,0.08);
+}
+body{background:var(--nv);color:var(--wh);font-family:'Noto Sans KR',sans-serif;min-height:100vh;}
+/* ── 헤더 ── */
+.hdr{background:linear-gradient(90deg,var(--nv2),var(--nv3));border-bottom:2px solid var(--go);
+     padding:14px 20px;display:flex;align-items:center;justify-content:space-between;
+     position:sticky;top:0;z-index:100;}
+.hdr-title{font-family:'Bebas Neue',cursive;font-size:26px;color:var(--gL);letter-spacing:3px;}
+.hdr-sub{font-size:10px;color:var(--gY);margin-top:2px;font-family:'IBM Plex Mono',monospace;}
+.hdr-right{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:6px;}
+.ldot{width:7px;height:7px;background:var(--gr);border-radius:50%;display:inline-block;margin-right:5px;animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
+/* ── 탭 ── */
+.tabs{display:flex;gap:3px;padding:14px 20px 0;border-bottom:1px solid var(--bd);flex-wrap:wrap;background:var(--nv);}
+.tab{padding:8px 16px;border-radius:8px 8px 0 0;font-size:12px;font-weight:700;cursor:pointer;
+     border:1px solid transparent;border-bottom:none;color:var(--gY);background:transparent;
+     font-family:'Noto Sans KR',sans-serif;transition:all .2s;}
+.tab.on{background:var(--nv3);color:var(--gL);border-color:var(--bd);}
+.tab:hover:not(.on){color:var(--wh);background:rgba(255,255,255,.05);}
+/* ── 콘텐츠 ── */
+.content{padding:20px;display:none;}
+.content.active{display:block;}
+/* ── 카드 ── */
+.card{background:var(--nv2);border:1px solid var(--bd);border-radius:12px;padding:18px;
+      transition:transform .2s,box-shadow .2s;margin-bottom:14px;}
+.card:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.4);}
+.ct{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--gY);
+    letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;}
+/* ── 그리드 ── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.g5{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;}
+@media(max-width:900px){.g5{grid-template-columns:1fr 1fr 1fr}.g2{grid-template-columns:1fr}}
+@media(max-width:600px){.g5{grid-template-columns:1fr 1fr}}
+/* ── 숫자 ── */
+.bn{font-family:'Bebas Neue',cursive;font-size:46px;line-height:1;}
+.bn.re{color:var(--re)}.bn.gr{color:var(--gr)}.bn.or{color:var(--or)}.bn.bl{color:var(--bl)}
+/* ── 바지 ── */
+.bdg{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;
+     font-size:11px;font-weight:700;font-family:'IBM Plex Mono',monospace;}
+.bdg-r{background:rgba(229,62,62,.15);color:var(--re);border:1px solid rgba(229,62,62,.3);}
+.bdg-g{background:rgba(34,197,94,.15);color:var(--gr);border:1px solid rgba(34,197,94,.3);}
+.bdg-y{background:rgba(234,179,8,.15);color:#EAB308;border:1px solid rgba(234,179,8,.3);}
+.bdg-gy{background:rgba(100,116,139,.15);color:var(--gY);border:1px solid rgba(100,116,139,.3);}
+/* ── 게이지 바 ── */
+.gb{height:7px;border-radius:4px;background:rgba(255,255,255,.1);overflow:hidden;margin:6px 0;}
+.gf{height:100%;border-radius:4px;transition:width .8s;}
+/* ── 행 ── */
+.row{display:flex;align-items:center;justify-content:space-between;
+     padding:8px 0;border-bottom:1px solid var(--bd);}
+.row:last-child{border-bottom:none;}
+.row-l{font-size:12px;color:var(--gY);}
+.row-r{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;}
+/* ── 알림 박스 ── */
+.wb{background:rgba(229,62,62,.1);border:1px solid rgba(229,62,62,.3);border-radius:10px;
+    padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.6;color:#FCA5A5;}
+.gb2{background:rgba(201,148,58,.1);border:1px solid rgba(201,148,58,.3);border-radius:10px;
+     padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.6;color:var(--gL);}
+.ib{background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);border-radius:10px;
+    padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.6;color:#93C5FD;}
+/* ── 기타 ── */
+.sm{font-size:11px;color:var(--gY);}
+.fb{display:flex;justify-content:space-between;align-items:center;}
+.mg{margin-bottom:16px;}
+/* ── 로딩 ── */
+.loading-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:16px;}
+.spin{width:48px;height:48px;border:4px solid var(--bd);border-top-color:var(--gL);
+      border-radius:50%;animation:spin 1s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.live-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(34,197,94,.1);
+            border:1px solid rgba(34,197,94,.3);border-radius:20px;padding:3px 10px;
+            font-size:10px;color:var(--gr);font-family:'IBM Plex Mono',monospace;}
+.err-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(249,115,22,.1);
+           border:1px solid rgba(249,115,22,.3);border-radius:20px;padding:3px 10px;
+           font-size:10px;color:var(--or);font-family:'IBM Plex Mono',monospace;cursor:pointer;}
+.btn-refresh{background:var(--nv3);border:1px solid var(--bd);border-radius:6px;
+             color:var(--gY);font-size:10px;padding:3px 10px;cursor:pointer;
+             font-family:'IBM Plex Mono',monospace;}
+/* ── 체크리스트 ── */
+.ci{display:flex;align-items:flex-start;gap:9px;padding:9px 0;
+    border-bottom:1px solid var(--bd);cursor:pointer;}
+.ci:last-child{border-bottom:none;}
+.cb{width:19px;height:19px;border-radius:4px;border:2px solid var(--bd);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;margin-top:1px;}
+.cb.ck{background:var(--gr);border-color:var(--gr);}
+.ctxt{font-size:12px;line-height:1.5;}
+.ctxt.dn{color:var(--gY);text-decoration:line-through;}
+/* ── 슬라이더 ── */
+.sw{margin:14px 0;}
+.sw-label{font-size:11px;color:var(--gY);display:flex;justify-content:space-between;margin-bottom:5px;}
+input[type=range]{width:100%;accent-color:var(--go);cursor:pointer;}
+/* ── 국채 금리 게이지 ── */
+.yield-gauge-wrap{position:relative;margin:16px 0 10px;height:56px;}
+.yield-track{position:absolute;bottom:0;left:0;right:0;height:14px;border-radius:7px;
+  background:linear-gradient(90deg,#22C55E 0%,#22C55E 47%,#EAB308 47%,#EAB308 52%,#EF4444 52%,#EF4444 100%);opacity:.35;}
+.yield-fill{position:absolute;bottom:0;left:0;height:14px;border-radius:7px;transition:width .8s;}
+.yield-line{position:absolute;bottom:-4px;width:2px;height:22px;background:rgba(255,255,255,.9);border-radius:1px;transform:translateX(-50%);}
+.yield-line-label{position:absolute;top:-22px;transform:translateX(-50%);font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(255,255,255,.7);white-space:nowrap;}
+.yield-pin{position:absolute;bottom:10px;width:3px;height:28px;border-radius:2px;transform:translateX(-50%);box-shadow:0 0 8px rgba(255,255,255,.6);transition:left .8s;}
+.yield-pin-label{position:absolute;top:-32px;transform:translateX(-50%);font-family:'Bebas Neue',cursive;font-size:18px;white-space:nowrap;transition:left .8s;}
+.yield-ticks{position:absolute;bottom:18px;left:0;right:0;display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--gY);}
+.yh-row{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--bd);}
+.yh-row:last-child{border-bottom:none;}
+.yh-date{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--gY);min-width:52px;}
+.yh-bar-wrap{flex:1;height:6px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden;}
+.yh-bar{height:100%;border-radius:3px;}
+.yh-val{font-family:'IBM Plex Mono',monospace;font-size:10px;min-width:36px;text-align:right;}
+</style>
+</head>
+<body>
+
+<!-- 헤더 -->
+<div class="hdr">
+  <div>
+    <div class="hdr-title">BangBro Dashboard</div>
+    <div class="hdr-sub">뱅브로식 미국주식 투자 모니터링 시스템</div>
+  </div>
+  <div class="hdr-right">
+    <span id="live-badge" class="err-badge">⟳ 로딩 중...</span>
+    <div id="update-time" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--gY);">—</div>
+    <button class="btn-refresh" onclick="loadData()">🔄 새로고침</button>
+  </div>
+</div>
+
+<!-- 탭 -->
+<div class="tabs">
+  <button class="tab on" onclick="switchTab(0)">📊 시장 현황</button>
+  <button class="tab" onclick="switchTab(1)">💰 수익 시뮬레이터</button>
+  <button class="tab" onclick="switchTab(2)">🎯 바닥 신호판</button>
+  <button class="tab" onclick="switchTab(3)">✅ 실행 체크리스트</button>
+</div>
+
+<!-- 탭1: 시장현황 -->
+<div class="content active" id="tab0">
+  <div class="g5 mg" id="kpi-grid"></div>
+  <div class="mg" id="yield-card"></div>
+  <div class="g2">
+    <div class="card" id="signal-card"></div>
+    <div>
+      <div class="card mg" id="etf-card"></div>
+      <div class="card" id="alloc-card"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 탭2: 시뮬레이터 -->
+<div class="content" id="tab1">
+  <div class="g2">
+    <div class="card">
+      <div class="ct">포트폴리오 설정</div>
+      <div class="sw"><div class="sw-label"><span>투자 원금</span><span id="s-cap-v" style="color:var(--gL);font-family:'IBM Plex Mono',monospace">10억</span></div><input type="range" id="s-cap" min="100000000" max="5000000000" step="100000000" value="1000000000" oninput="calcSim()"/></div>
+      <div class="sw"><div class="sw-label"><span>TQQQ 비중</span><span id="s-tpct-v" style="color:var(--gL);font-family:'IBM Plex Mono',monospace">50%</span></div><input type="range" id="s-tpct" min="0" max="80" step="5" value="50" oninput="calcSim()"/></div>
+      <div class="sw"><div class="sw-label"><span>FNGU 비중</span><span id="s-fpct-v" style="color:var(--gL);font-family:'IBM Plex Mono',monospace">15%</span></div><input type="range" id="s-fpct" min="0" max="40" step="5" value="15" oninput="calcSim()"/></div>
+      <div class="sw"><div class="sw-label"><span>나스닥 수익률</span><span id="s-ndxr-v" style="color:var(--gL);font-family:'IBM Plex Mono',monospace">+80%</span></div><input type="range" id="s-ndxr" min="-50" max="300" step="10" value="80" oninput="calcSim()"/></div>
+      <div class="sw"><div class="sw-label"><span>투자 기간</span><span id="s-yrs-v" style="color:var(--gL);font-family:'IBM Plex Mono',monospace">3년</span></div><input type="range" id="s-yrs" min="1" max="10" step="1" value="3" oninput="calcSim()"/></div>
+      <div class="row"><span class="row-l">QQQ 비중 (자동)</span><span id="s-qpct-v" style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--gL)">35%</span></div>
+      <div class="ib" style="margin-top:12px;font-size:11px;">TQQQ ≈ 나스닥×2.7배 / FNGU ≈ 나스닥×3.2배 (음의복리 감안)</div>
+      <div id="sim-live-price" style="margin-top:8px;background:var(--nv3);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--gY);"></div>
+    </div>
+    <div>
+      <div class="card mg">
+        <div class="ct">낙관 시나리오</div>
+        <div class="fb" style="margin-bottom:10px;">
+          <div><div class="sm">최종 자산</div><div class="bn gr" id="sim-total">—</div></div>
+          <div style="text-align:right;"><div class="sm">총 수익률</div><div id="sim-rate" style="font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:700;">—</div></div>
+        </div>
+        <div style="background:linear-gradient(135deg,var(--nv3),rgba(201,148,58,.1));border:1px solid rgba(201,148,58,.3);border-radius:10px;padding:16px;margin-top:14px;" id="sim-detail"></div>
+      </div>
+      <div class="card">
+        <div class="ct">폭락 시나리오 (200일선 무시 진입 시)</div>
+        <div class="fb" style="margin-bottom:10px;">
+          <div><div class="sm">최종 자산</div><div class="bn re" id="sim-bad-total">—</div></div>
+          <div style="text-align:right;"><div class="sm">손실률</div><div id="sim-bad-rate" style="font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:700;color:var(--re);">—</div></div>
+        </div>
+        <div class="wb" style="font-size:11px;">TQQQ -55% / FNGU -65% / QQQ -20% 기준</div>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px;">
+    <div class="ct">역사적 TQQQ 저점 매수 수익률</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;" id="hist-grid"></div>
+  </div>
+</div>
+
+<!-- 탭3: 바닥 신호판 -->
+<div class="content" id="tab2">
+  <div class="g2 mg">
+    <div class="card" style="text-align:center;">
+      <div class="ct">진입 신호 점수</div>
+      <div class="bn" id="sig-score" style="font-size:64px;color:var(--re);">0/6</div>
+      <div class="sm" style="margin-top:6px;">클릭으로 직접 체크</div>
+      <div style="margin-top:10px;" id="sig-bars"></div>
+      <div class="gb2" style="margin-top:12px;font-size:11px;">3개 이상 → 소량 진입 / 6개 모두 → 본격 진입</div>
+    </div>
+    <div class="card" style="text-align:center;" id="verdict-card">
+      <div class="ct">진입 판단</div>
+      <div style="font-size:36px;margin-bottom:8px;">🛡️</div>
+      <div style="padding:14px;border-radius:10px;background:rgba(100,116,139,.15);border:1px solid rgba(100,116,139,.3);">
+        <div style="font-size:18px;font-weight:900;color:var(--gY);margin-bottom:4px;">현금 보유</div>
+        <div style="font-size:11px;color:var(--gY);">진입 신호 없음<br>현금이 무기입니다</div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="ct">신호 체크리스트 (6개) — 클릭해서 체크</div>
+    <div id="sig-list"></div>
+  </div>
+</div>
+
+<!-- 탭4: 실행 체크리스트 -->
+<div class="content" id="tab3">
+  <div class="card mg">
+    <div class="fb">
+      <div><div class="ct">실행 진행률</div><div id="cl-cnt" style="font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:700;color:var(--gL);">0/20</div></div>
+      <div style="text-align:right;"><div class="sm">완료율</div><div id="cl-pct" style="font-family:'Bebas Neue',cursive;font-size:40px;color:var(--or);">0%</div></div>
+    </div>
+    <div class="gb" style="height:10px;"><div class="gf" id="cl-bar" style="width:0%;background:linear-gradient(90deg,var(--go),var(--gr));"></div></div>
+  </div>
+  <div id="cl-secs"></div>
+  <div class="wb">본 내용은 학습 참고 자료이며 투자 권유가 아닙니다. 모든 투자 결정은 본인의 판단과 책임 하에 이루어져야 합니다.</div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// 유틸
+// ══════════════════════════════════════════════════════════════
+const fmt2 = n => n!=null ? n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
+const fmtW = n => n>=1e8?`${(n/1e8).toFixed(1)}억`:n>=1e4?`${(n/1e4).toFixed(0)}만`:`${n}`;
+const nowStr = () => {
+  const d=new Date();
+  return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+};
+
+// ══════════════════════════════════════════════════════════════
+// 탭 전환
+// ══════════════════════════════════════════════════════════════
+function switchTab(i) {
+  document.querySelectorAll('.tab').forEach((t,j)=>t.classList.toggle('on',i===j));
+  document.querySelectorAll('.content').forEach((c,j)=>c.classList.toggle('active',i===j));
+}
+
+// ══════════════════════════════════════════════════════════════
+// 데이터 fetch (다중 프록시 폴백)
+// ══════════════════════════════════════════════════════════════
+const PROXIES = [
+  u=>`https://corsproxy.io/?${encodeURIComponent(u)}`,
+  u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+];
+
+async function fetchJSON(targetUrl) {
+  for(const proxy of PROXIES){
+    try{
+      const r=await fetch(proxy(targetUrl),{signal:AbortSignal.timeout(10000)});
+      if(!r.ok) continue;
+      return await r.json();
+    }catch{continue;}
+  }
+  return null;
+}
+
+async function fetchQuote(symbol) {
+  const range = symbol==='^VIX'?'3mo':'1y';
+  const url=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d&includePrePost=false`;
+  const json=await fetchJSON(url);
+  const result=json?.chart?.result?.[0];
+  if(!result) return null;
+  const closes=(result.indicators?.quote?.[0]?.close??[]).filter(v=>v!=null);
+  const current=closes[closes.length-1];
+  if(!current) return null;
+  const ma200arr=closes.slice(-200);
+  const ma200=ma200arr.reduce((a,b)=>a+b,0)/ma200arr.length;
+  const timestamps=result.timestamp??[];
+  const yr=new Date().getFullYear();
+  let ytdBase=null;
+  for(let i=0;i<timestamps.length;i++){if(new Date(timestamps[i]*1000).getFullYear()===yr){ytdBase=closes[i];break;}}
+  const ytd=ytdBase?((current-ytdBase)/ytdBase*100):null;
+  const meta=result.meta??{};
+  const history=closes.slice(-7).map((v,i,arr)=>{
+    const ts=timestamps.slice(-arr.length)[i];
+    const d=ts?new Date(ts*1000):new Date();
+    return{date:`${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`,val:parseFloat(v.toFixed(3))};
+  });
+  return{
+    current:parseFloat(current.toFixed(2)),
+    ma200:parseFloat(ma200.toFixed(2)),
+    ytd:ytd?parseFloat(ytd.toFixed(1)):null,
+    high52:parseFloat((meta.fiftyTwoWeekHigh??Math.max(...closes)).toFixed(2)),
+    low52:parseFloat((meta.fiftyTwoWeekLow??Math.min(...closes)).toFixed(2)),
+    history
+  };
+}
+
+async function fetchFG() {
+  const json=await fetchJSON('https://production.dataviz.cnn.io/index/fearandgreed/graphdata');
+  return json?Math.round(json.fear_and_greed?.score??15):null;
+}
+
+// ══════════════════════════════════════════════════════════════
+// 전역 상태
+// ══════════════════════════════════════════════════════════════
+let D={}, FG=null;
+
+// ══════════════════════════════════════════════════════════════
+// 데이터 로드 & 렌더
+// ══════════════════════════════════════════════════════════════
+async function loadData() {
+  document.getElementById('live-badge').className='err-badge';
+  document.getElementById('live-badge').textContent='⟳ 로딩 중...';
+
+  const [sp500,ndx,tqqq,fngu,soxl,vix,gold,tnx,fg]=await Promise.all([
+    fetchQuote('^GSPC'),fetchQuote('^NDX'),fetchQuote('TQQQ'),
+    fetchQuote('FNGU'),fetchQuote('SOXL'),fetchQuote('^VIX'),
+    fetchQuote('GLD'),fetchQuote('^TNX'),fetchFG()
+  ]);
+
+  D={sp500,ndx,tqqq,fngu,soxl,vix,gold,tnx};
+  FG=fg;
+
+  document.getElementById('update-time').textContent=nowStr();
+
+  if(sp500||ndx||tqqq){
+    document.getElementById('live-badge').className='live-badge';
+    document.getElementById('live-badge').innerHTML='<span class="ldot" style="margin:0"></span> LIVE';
+  } else {
+    document.getElementById('live-badge').className='err-badge';
+    document.getElementById('live-badge').textContent='⚠️ 데이터 오류 — 재시도';
+    document.getElementById('live-badge').onclick=loadData;
+  }
+
+  renderT1();
+  calcSim();
+  renderT3();
+}
+
+// ══════════════════════════════════════════════════════════════
+// 탭1 렌더
+// ══════════════════════════════════════════════════════════════
+function renderT1() {
+  const tnxOk = D.tnx?.current < 4.5;
+  const ndxOk = D.ndx?.current > D.ndx?.ma200;
+  const sp5Ok = D.sp500?.current > D.sp500?.ma200;
+  const vixOk = D.vix?.current < 20;
+
+  // KPI 카드 5개
+  const kpis=[
+    {ct:'진입 신호', val:`${Math.round(([sp5Ok,ndxOk,tnxOk,vixOk].filter(Boolean).length/6)*100)}%`,
+     sub:`${[sp5Ok,ndxOk,tnxOk,vixOk].filter(Boolean).length}/6 충족`,
+     color:ndxOk?'gr':'re', bar:Math.round(([sp5Ok,ndxOk,tnxOk,vixOk].filter(Boolean).length/6)*100),
+     barC:ndxOk?'var(--gr)':'var(--re)', bdg:ndxOk?'bdg-g':'bdg-r', bdgTxt:ndxOk?'진입 검토':'현금 보유'},
+    {ct:'Fear & Greed', val:FG??'—', sub:FG<20?'극단적 공포':FG<40?'공포':FG<60?'중립':'탐욕',
+     color:'or', bar:FG??0, barC:'linear-gradient(90deg,var(--gr),var(--or),var(--re))', bdg:'bdg-y', bdgTxt:'CNN 지수'},
+    {ct:'NDX 200일선', val:D.ndx?.current?.toLocaleString()??'—', sub:`200MA: ${D.ndx?.ma200?.toLocaleString()??'—'}`,
+     color:ndxOk?'gr':'re', bar:D.ndx?.current&&D.ndx?.ma200?Math.min(100,(D.ndx.current/D.ndx.ma200*100).toFixed(0)):50,
+     barC:ndxOk?'var(--gr)':'var(--re)', bdg:ndxOk?'bdg-g':'bdg-r', bdgTxt:ndxOk?'200일선 상회':'200일선 하회'},
+    {ct:'US 10Y Yield', val:`${D.tnx?.current?.toFixed(3)??'—'}%`, sub:'기준선 4.5%',
+     color:tnxOk?'gr':'re', bar:D.tnx?.current?Math.min(100,((D.tnx.current-3.5)/(5.5-3.5)*100).toFixed(0)):50,
+     barC:tnxOk?'#22C55E':'linear-gradient(90deg,#22C55E,#EF4444)', bdg:tnxOk?'bdg-g':'bdg-r', bdgTxt:tnxOk?'안정':'위험'},
+    {ct:'VIX', val:fmt2(D.vix?.current), sub:vixOk?'안정':'고변동성',
+     color:vixOk?'gr':'or', bar:Math.min(100,(D.vix?.current??25)*2),
+     barC:'var(--or)', bdg:vixOk?'bdg-g':'bdg-y', bdgTxt:'변동성 지수'},
+  ];
+  document.getElementById('kpi-grid').innerHTML=kpis.map(k=>`
+    <div class="card">
+      <div class="ct">${k.ct}</div>
+      <div class="bn ${k.color}">${k.val}</div>
+      <div class="sm" style="margin-top:6px;">${k.sub}</div>
+      <div class="gb"><div class="gf" style="width:${k.bar}%;background:${k.barC};"></div></div>
+      <span class="bdg ${k.bdg}">${k.bdgTxt}</span>
+    </div>`).join('');
+
+  // 국채 금리 게이지
+  if(D.tnx){
+    const cur=D.tnx.current, thr=4.5, MIN=3.5, MAX=5.5;
+    const isRisk=cur>=thr;
+    const pct=Math.min(100,Math.max(0,(cur-MIN)/(MAX-MIN)*100)).toFixed(1);
+    const thrPct=((thr-MIN)/(MAX-MIN)*100).toFixed(1);
+    const pinC=isRisk?'#EF4444':'#22C55E';
+    const fillG=isRisk?'linear-gradient(90deg,#22C55E,#EAB308 40%,#EF4444)':'linear-gradient(90deg,#22C55E,#4ADE80)';
+    const hist=D.tnx.history??[];
+    const maxH=hist.length?Math.max(...hist.map(h=>h.val)):cur;
+    document.getElementById('yield-card').innerHTML=`
+      <div class="card">
+        <div class="ct">미국 10년물 국채 금리 (US10Y) — 실시간</div>
+        <div class="fb" style="margin-bottom:4px;">
+          <div>
+            <div class="bn ${isRisk?'re':'gr'}">${cur.toFixed(3)}%</div>
+            <div class="sm" style="margin-top:3px;">기준선 ${thr}% 대비
+              <span style="color:${isRisk?'var(--re)':'var(--gr)'};font-weight:700;">
+                ${isRisk?'+':'−'}${Math.abs(cur-thr).toFixed(3)}%
+              </span>
+            </div>
+          </div>
+          <span class="bdg ${isRisk?'bdg-r':'bdg-g'}" style="font-size:12px;padding:5px 14px;">
+            ${isRisk?'⚠️ 위험 구간':'✅ 안정 구간'}
+          </span>
+        </div>
+        <div class="yield-gauge-wrap">
+          <div class="yield-ticks">${['3.5','3.8','4.0','4.2','4.4','4.5','4.7','5.0','5.2','5.5'].map(t=>`<span>${t}</span>`).join('')}</div>
+          <div class="yield-track"></div>
+          <div class="yield-fill" style="width:${pct}%;background:${fillG};"></div>
+          <div class="yield-line" style="left:${thrPct}%;"><div class="yield-line-label" style="left:50%;">4.5%</div></div>
+          <div class="yield-pin" style="left:${pct}%;background:${pinC};"></div>
+          <div class="yield-pin-label" style="left:${pct}%;color:${pinC};">${cur.toFixed(3)}%</div>
+        </div>
+        <div style="border-radius:8px;padding:10px 14px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:8px;margin-top:10px;border:1px solid;
+          background:${isRisk?'rgba(239,68,68,.1)':'rgba(34,197,94,.1)'};
+          border-color:${isRisk?'rgba(239,68,68,.35)':'rgba(34,197,94,.35)'};
+          color:${isRisk?'#FCA5A5':'#86EFAC'};">
+          <span style="font-size:16px;">${isRisk?'🔴':'🟢'}</span>
+          <div>${isRisk?`현재 ${cur.toFixed(3)}% — 4.5% 초과. 성장주 하락 압력 증가.`:`현재 ${cur.toFixed(3)}% — 4.5% 미만. 상대적 안정 구간.`}</div>
+        </div>
+        ${hist.length?`<div style="margin-top:12px;">
+          <div style="font-size:10px;color:var(--gY);margin-bottom:6px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;">최근 추이</div>
+          ${hist.map(h=>`<div class="yh-row">
+            <span class="yh-date">${h.date}</span>
+            <div class="yh-bar-wrap"><div class="yh-bar" style="width:${(h.val/maxH*100).toFixed(0)}%;background:${h.val>=thr?'var(--re)':'var(--gr)'};"></div></div>
+            <span class="yh-val" style="color:${h.val>=thr?'var(--re)':'var(--gr)'};">${h.val}%</span>
+          </div>`).join('')}
+        </div>`:''}
+      </div>`;
+  }
+
+  // 신호 체크판
+  const sigs=[
+    {l:'S&P500 vs 200일선', v:`${fmt2(D.sp500?.current)} / ${fmt2(D.sp500?.ma200)}`, ok:sp5Ok},
+    {l:'NDX vs 200일선',    v:`${fmt2(D.ndx?.current)} / ${fmt2(D.ndx?.ma200)}`,     ok:ndxOk},
+    {l:'Fear & Greed',      v:`${FG??'—'} (${FG<20?'극단공포':FG<40?'공포':FG<60?'중립':'탐욕'})`, ok:FG!=null&&FG<20},
+    {l:'10년물 국채 금리',  v:`${D.tnx?.current?.toFixed(3)??'—'}%`,                 ok:tnxOk},
+    {l:'VIX 변동성',        v:`${fmt2(D.vix?.current)}`,                              ok:vixOk},
+    {l:'Gold 안전자산',     v:`$${fmt2(D.gold?.current)}`,                            ok:null},
+  ];
+  document.getElementById('signal-card').innerHTML=`<div class="ct">신호 체크판</div>`+sigs.map(s=>`
+    <div class="row">
+      <span class="row-l">${s.l}</span>
+      <div style="display:flex;align-items:center;gap:7px;">
+        <span class="row-r" style="color:${s.ok===true?'var(--gr)':s.ok===false?'var(--re)':'#EAB308'};font-size:10px;">${s.v}</span>
+        <span class="bdg ${s.ok===true?'bdg-g':s.ok===false?'bdg-r':'bdg-y'}" style="font-size:9px;padding:1px 7px;">${s.ok===true?'OK':s.ok===false?'NG':'—'}</span>
+      </div>
+    </div>`).join('');
+
+  // ETF 카드
+  const etfs=[{n:'TQQQ',d:'나스닥100 3배',data:D.tqqq},{n:'FNGU',d:'FANG+ 3배',data:D.fngu},{n:'SOXL',d:'반도체 3배',data:D.soxl}];
+  document.getElementById('etf-card').innerHTML=`<div class="ct">레버리지 ETF 현황</div>`+
+    etfs.map((e,i)=>`
+    <div style="padding:8px 0;border-bottom:${i<2?'1px solid var(--bd)':'none'};">
+      <div class="fb">
+        <div><span style="font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--gL);">${e.n}</span>
+             <span class="sm" style="margin-left:7px;">${e.d}</span></div>
+        <div style="text-align:right;">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:700;">$${fmt2(e.data?.current)}</div>
+          <div style="font-size:10px;color:${e.data?.ytd>=0?'var(--gr)':'var(--re)'};">${e.data?.ytd!=null?(e.data.ytd>0?'+':'')+e.data.ytd+'% YTD':'—'}</div>
+        </div>
+      </div>
+      ${e.data?.high52&&e.data?.low52?`<div class="gb" style="margin-top:4px;"><div class="gf" style="width:${(((e.data.current-e.data.low52)/(e.data.high52-e.data.low52))*100).toFixed(0)}%;background:var(--bl);"></div></div>`:''}
+    </div>`).join('')+
+    (!ndxOk?'<div class="wb" style="margin-top:10px;font-size:11px;">🔴 200일선 하위 — 레버리지 ETF 보유 금지</div>':'');
+
+  // 자산배분
+  const allocs=[{a:'달러 예금/MMF',r:'60%',amt:'6억',ok:true},{a:'GLD 금 ETF',r:'20%',amt:'2억',ok:true},
+    {a:'QQQ 소량',r:'10%',amt:'1억',ok:true},{a:'원화 현금',r:'10%',amt:'1억',ok:true},
+    {a:'TQQQ/FNGU/SOXL',r:'0%',amt:'절대 금지',ok:false}];
+  document.getElementById('alloc-card').innerHTML=`<div class="ct">뱅브로 원칙 — 지금 배분</div>
+    <div class="gb2" style="font-size:11px;">200일선 아래 = 현금이 무기. 기다리는 것이 가장 용감한 행동.</div>`+
+    allocs.map(r=>`<div class="row">
+      <span class="row-l">${r.a}</span>
+      <div style="display:flex;gap:7px;align-items:center;">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:${r.ok?'var(--gY)':'var(--re)'};">${r.amt}</span>
+        <span class="bdg ${r.ok?'bdg-gy':'bdg-r'}" style="font-size:9px;padding:1px 7px;">${r.r}</span>
+      </div>
+    </div>`).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+// 탭2: 시뮬레이터
+// ══════════════════════════════════════════════════════════════
+function calcSim() {
+  const cap=+document.getElementById('s-cap').value;
+  const tpct=+document.getElementById('s-tpct').value;
+  const fpct=+document.getElementById('s-fpct').value;
+  const ndxR=+document.getElementById('s-ndxr').value;
+  const yrs=+document.getElementById('s-yrs').value;
+  const qpct=100-tpct-fpct;
+  document.getElementById('s-cap-v').textContent=fmtW(cap);
+  document.getElementById('s-tpct-v').textContent=`${tpct}% (${fmtW(cap*tpct/100)})`;
+  document.getElementById('s-fpct-v').textContent=`${fpct}% (${fmtW(cap*fpct/100)})`;
+  document.getElementById('s-ndxr-v').textContent=`+${ndxR}%`;
+  document.getElementById('s-yrs-v').textContent=`${yrs}년`;
+  document.getElementById('s-qpct-v').textContent=`${qpct}% (${fmtW(cap*qpct/100)})`;
+  const tAmt=cap*tpct/100, fAmt=cap*fpct/100, qAmt=cap*qpct/100;
+  const ftT=tAmt*(1+ndxR*2.7/100), ftF=fAmt*(1+ndxR*3.2/100), ftQ=qAmt*(1+ndxR*0.95/100);
+  const total=ftT+ftF+ftQ, totR=((total-cap)/cap*100).toFixed(1);
+  const bTotal=tAmt*0.45+fAmt*0.35+qAmt*0.80, bR=((bTotal-cap)/cap*100).toFixed(1);
+  document.getElementById('sim-total').textContent=fmtW(total);
+  document.getElementById('sim-rate').style.color=total>cap?'var(--gr)':'var(--re)';
+  document.getElementById('sim-rate').textContent=`${totR>0?'+':''}${totR}%`;
+  document.getElementById('sim-detail').innerHTML=[['원금',fmtW(cap)],['TQQQ 수익',fmtW(ftT-tAmt)],['FNGU 수익',fmtW(ftF-fAmt)],['QQQ 수익',fmtW(ftQ-qAmt)],['최종 합계',fmtW(total)]].map(([l,v])=>`
+    <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bd);">
+      <span style="font-size:12px;color:var(--gY);">${l}</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;color:var(--gL);">${v}</span>
+    </div>`).join('');
+  document.getElementById('sim-bad-total').textContent=fmtW(bTotal);
+  document.getElementById('sim-bad-rate').textContent=`${bR}%`;
+  if(D.tqqq?.current) document.getElementById('sim-live-price').innerHTML=`실시간 — TQQQ: <span style="color:var(--gL);font-family:'IBM Plex Mono',monospace;">$${fmt2(D.tqqq.current)}</span>&nbsp;FNGU: <span style="color:var(--gL);font-family:'IBM Plex Mono',monospace;">$${fmt2(D.fngu?.current)}</span>`;
+  const hists=[{ev:'2020.3 코로나',buy:'$8',ret:'+1,038%',c:'var(--gr)'},{ev:'2022.10 금리',buy:'$15',ret:'+287%',c:'var(--gr)'},{ev:'2025.4 관세',buy:'$17',ret:'+253%',c:'var(--gr)'},{ev:'현재',buy:`$${fmt2(D.tqqq?.current)}`,ret:'대기 중',c:'var(--or)'}];
+  document.getElementById('hist-grid').innerHTML=hists.map(h=>`
+    <div style="background:var(--nv3);border-radius:9px;padding:12px;text-align:center;border:1px solid var(--bd);">
+      <div style="font-size:10px;color:var(--gY);margin-bottom:5px;">${h.ev}</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;margin-bottom:3px;">${h.buy}</div>
+      <div style="font-family:'Bebas Neue',cursive;font-size:26px;color:${h.c};">${h.ret}</div>
+    </div>`).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+// 탭3: 바닥 신호판
+// ══════════════════════════════════════════════════════════════
+const sigChecked={};
+function renderT3() {
+  const tnxCur=D.tnx?.current??4.5;
+  const sigs=[
+    {k:'s1',lbl:'Fear & Greed 한 자릿수(0~9) 진입',  desc:`현재 ${FG??'—'} — 극단 공포`,      cur:`현재 ${FG??'—'} (${FG<10?'충족!':'미충족'})`,      g:FG??15,c:'var(--or)'},
+    {k:'s2',lbl:'HY Spread 5 이상에서 주간 꺾임',     desc:'꺾이는 순간이 공포 극점 통과 신호', cur:'수동 확인 필요',                                     g:40,c:'var(--re)'},
+    {k:'s3',lbl:'NDX 200일선 재돌파 2일 연속 ★핵심★',desc:`종가 ${D.ndx?.ma200?.toFixed(0)??'—'} 위 2일 연속`,cur:`${D.ndx?.current?.toLocaleString()??'—'} (${D.ndx?.current>D.ndx?.ma200?'충족!':'미충족'})`,g:D.ndx?.current&&D.ndx?.ma200?Math.min(99,(D.ndx.current/D.ndx.ma200*100).toFixed(0)):99,c:'var(--re)'},
+    {k:'s4',lbl:'이란 협상 타결 or 호르무즈 재개',     desc:'근본 원인 해소 — 뉴스 직접 확인',   cur:'수동 확인 필요',                                     g:30,c:'var(--bl)'},
+    {k:'s5',lbl:'VIX 20 이하 하락',                   desc:`현재 VIX ${fmt2(D.vix?.current)}`,  cur:`${fmt2(D.vix?.current)} (${D.vix?.current<20?'충족!':'미충족'})`,g:Math.min(100,(D.vix?.current??25)*2),c:'var(--bl)'},
+    {k:'s6',lbl:'10년물 국채 금리 4.5% 이하 안정',    desc:`현재 ${tnxCur.toFixed(3)}%`,        cur:`${tnxCur.toFixed(3)}% (${tnxCur<4.5?'충족!':'미충족'})`,g:Math.round((tnxCur-3.5)/(5.5-3.5)*100),c:tnxCur>=4.5?'var(--re)':'var(--gr)'},
+  ];
+  document.getElementById('sig-list').innerHTML=sigs.map(s=>`
+    <div class="ci" onclick="toggleSig('${s.k}')">
+      <div class="cb ${sigChecked[s.k]?'ck':''}" id="cb-${s.k}">${sigChecked[s.k]?'<span style="color:#fff;font-size:11px;font-weight:900;">✓</span>':''}</div>
+      <div style="flex:1;">
+        <div style="font-size:12px;font-weight:700;color:${sigChecked[s.k]?s.c:'var(--wh)'};margin-bottom:2px;">${s.lbl}</div>
+        <div style="font-size:10px;color:var(--gY);margin-bottom:4px;">${s.desc}</div>
+        <div class="gb" style="height:4px;"><div class="gf" style="width:${sigChecked[s.k]?100:s.g}%;background:${sigChecked[s.k]?s.c:'linear-gradient(90deg,var(--gr),var(--re))'};"></div></div>
+        <div style="font-size:9px;color:var(--gy);margin-top:3px;font-family:'IBM Plex Mono',monospace;">${s.cur}</div>
+      </div>
+    </div>`).join('');
+  updateSigScore();
+}
+
+function toggleSig(k){
+  sigChecked[k]=!sigChecked[k];
+  renderT3();
+}
+
+function updateSigScore(){
+  const score=Object.values(sigChecked).filter(Boolean).length;
+  const el=document.getElementById('sig-score');
+  el.textContent=`${score}/6`;
+  el.style.color=score>=5?'var(--gr)':score>=3?'var(--or)':score>=1?'var(--bl)':'var(--re)';
+  document.getElementById('sig-bars').innerHTML=[0,1,2,3,4,5].map(i=>`<div style="height:5px;border-radius:3px;margin-bottom:3px;background:${i<score?'var(--gr)':'rgba(255,255,255,.1)'}"></div>`).join('');
+  const verdicts=[
+    {min:5,ic:'🚀',t:'진입 가능!',d:'핵심 신호 충족<br>소액 분할 진입 검토',c:'var(--gr)',bg:'rgba(34,197,94,.1)',bc:'rgba(34,197,94,.3)'},
+    {min:3,ic:'⚡',t:'준비 단계',d:'일부 신호 충족<br>200일선 돌파 대기',c:'var(--or)',bg:'rgba(249,115,22,.1)',bc:'rgba(249,115,22,.3)'},
+    {min:1,ic:'⏳',t:'대기 중',d:'신호 수집 중<br>현금 보유 유지',c:'var(--bl)',bg:'rgba(59,130,246,.1)',bc:'rgba(59,130,246,.3)'},
+    {min:0,ic:'🛡️',t:'현금 보유',d:'진입 신호 없음<br>현금이 무기입니다',c:'var(--gY)',bg:'rgba(100,116,139,.15)',bc:'rgba(100,116,139,.3)'},
+  ];
+  const v=verdicts.find(v=>score>=v.min);
+  document.getElementById('verdict-card').innerHTML=`
+    <div class="ct">진입 판단</div>
+    <div style="font-size:36px;margin-bottom:8px;">${v.ic}</div>
+    <div style="padding:14px;border-radius:10px;background:${v.bg};border:1px solid ${v.bc};">
+      <div style="font-size:18px;font-weight:900;color:${v.c};margin-bottom:4px;">${v.t}</div>
+      <div style="font-size:11px;color:var(--gY);">${v.d}</div>
+    </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// 탭4: 실행 체크리스트
+// ══════════════════════════════════════════════════════════════
+const clChecked={};
+const clSecs=[
+  {t:'즉시 실행 (오늘)',items:[{k:'a1',tx:'미래에셋 or 키움 해외주식 계좌 개설 신청'},{k:'a2',tx:'레버리지 ETF 보유 여부 확인 → 보유 시 당일 매도'},{k:'a3',tx:'여유자금 6억 달러 환전 → 달러 MMF 또는 달러 RP 가입'},{k:'a4',tx:'GLD 2억 매수 (해외주식 계좌 세팅 후)'},{k:'a5',tx:'QQQ 1억 소량 매수 (장기 확신 포지션)'}]},
+  {t:'이번 주 모니터링',items:[{k:'b1',tx:'TradingView → NDX 일봉 → MA200 돌파 알림 등록'},{k:'b2',tx:'CNN Fear & Greed 북마크'},{k:'b3',tx:'FRED HY Spread 북마크'},{k:'b4',tx:'10년물 국채 금리 모니터링 — 4.5% 돌파 시 주의'},{k:'b5',tx:'3월 28일(금) 캘린더 등록 — 이란 5일 유예 만료일 ★'}]},
+  {t:'200일선 재돌파 시 실행',items:[{k:'c1',tx:'돌파 확인 당일 종가 → TQQQ 2억 시장가 매수'},{k:'c2',tx:'GLD 보유분 절반 익절 → 실탄 확보'},{k:'c3',tx:'3~5일 후 200일선 유지 확인 → TQQQ 추가 2억'},{k:'c4',tx:'2주 후 완전 안착 → TQQQ 1억 + FNGU 5천만'},{k:'c5',tx:'항상 현금 2억 이상 유보 유지'}]},
+  {t:'절대 하지 말 것',items:[{k:'d1',tx:'200일선 회복 전 TQQQ/FNGU/SOXL 매수'},{k:'d2',tx:'"많이 빠졌으니 저점이겠지" 감에 의한 진입'},{k:'d3',tx:'생활비·대출금·타인 자금 투자'},{k:'d4',tx:'손실 복구 목적 레버리지 추가매수'},{k:'d5',tx:'커뮤니티·SNS 추천 뇌동매매'}]},
+];
+function renderCL(){
+  const all=clSecs.flatMap(s=>s.items).length;
+  const cnt=Object.values(clChecked).filter(Boolean).length;
+  const pct=Math.round(cnt/all*100);
+  document.getElementById('cl-cnt').textContent=`${cnt}/${all}`;
+  document.getElementById('cl-pct').textContent=`${pct}%`;
+  document.getElementById('cl-pct').style.color=pct>70?'var(--gr)':'var(--or)';
+  document.getElementById('cl-bar').style.width=`${pct}%`;
+  document.getElementById('cl-secs').innerHTML=clSecs.map(sec=>`
+    <div class="card mg">
+      <div class="ct">${sec.t}</div>
+      ${sec.items.map(it=>`
+        <div class="ci" onclick="toggleCL('${it.k}')">
+          <div class="cb ${clChecked[it.k]?'ck':''}">${clChecked[it.k]?'<span style="color:#fff;font-size:11px;font-weight:900;">✓</span>':''}</div>
+          <div class="ctxt ${clChecked[it.k]?'dn':''}">${it.tx}</div>
+        </div>`).join('')}
+    </div>`).join('');
+}
+function toggleCL(k){clChecked[k]=!clChecked[k];renderCL();}
+renderCL();
+
+// ══════════════════════════════════════════════════════════════
+// 시작
+// ══════════════════════════════════════════════════════════════
+loadData();
+// 30분마다 자동 갱신
+setInterval(loadData, 30*60*1000);
+</script>
+</body>
+</html>
