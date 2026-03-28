@@ -1,7 +1,0 @@
-{
-  "functions": {
-    "api/quote.js": {
-      "maxDuration": 30
-    }
-  }
-}
