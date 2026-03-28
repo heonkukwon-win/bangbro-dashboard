@@ -7,105 +7,22 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <style>body{margin:0;padding:0;} #root{min-height:100vh;}</style>
+  <style>body{margin:0;padding:0;}#root{min-height:100vh;}</style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
 const { useState, useEffect, useCallback } = React;
 
-// ─── 데이터 fetch (다중 프록시 폴백) ──────────────────────────
-const PROXIES = [
-  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  url => `https://proxy.cors.sh/${url}`,
-];
-
-async function fetchWithFallback(targetUrl) {
-  for (const makeProxy of PROXIES) {
-    try {
-      const res = await fetch(makeProxy(targetUrl), { signal: AbortSignal.timeout(8000) });
-      if (!res.ok) continue;
-      const text = await res.text();
-      return JSON.parse(text);
-    } catch { continue; }
-  }
-  throw new Error(`All proxies failed for: ${targetUrl}`);
+// ??? ?곗씠??濡쒕뱶 (Vercel ?쒕쾭由ъ뒪 API ?몄텧) ????????????????????
+// 媛숈? ?꾨찓?몄쓽 /api/quote 瑜??몄텧 ??CORS 臾몄젣 ?놁쓬!
+async function loadAllData() {
+  const res = await fetch('/api/quote');
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
 }
 
-async function fetchQuote(symbol, range = "1y", interval = "1d") {
-  try {
-    const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}&includePrePost=false`;
-    const json = await fetchWithFallback(targetUrl);
-    const result = json?.chart?.result?.[0];
-    if (!result) return null;
-
-    const closes = result.indicators?.quote?.[0]?.close ?? [];
-    const validCloses = closes.filter(v => v != null);
-    const current = validCloses[validCloses.length - 1];
-    if (!current) return null;
-
-    // 200일 이동평균 계산
-    const ma200arr = validCloses.slice(-200);
-    const ma200 = ma200arr.length > 0
-      ? ma200arr.reduce((a, b) => a + b, 0) / ma200arr.length
-      : null;
-
-    // YTD 수익률 (연초 첫 거래일 기준)
-    const timestamps = result.timestamp ?? [];
-    const currentYear = new Date().getFullYear();
-    let ytdBase = null;
-    for (let i = 0; i < timestamps.length; i++) {
-      if (new Date(timestamps[i] * 1000).getFullYear() === currentYear) {
-        ytdBase = validCloses[i];
-        break;
-      }
-    }
-    const ytd = ytdBase ? (((current - ytdBase) / ytdBase) * 100) : null;
-
-    // 52주 고가/저가
-    const meta = result.meta ?? {};
-    const high52 = meta.fiftyTwoWeekHigh ?? Math.max(...validCloses);
-    const low52  = meta.fiftyTwoWeekLow  ?? Math.min(...validCloses);
-
-    // 최근 7일 히스토리
-    const recentCloses = validCloses.slice(-7);
-    const recentTs     = timestamps.slice(-7);
-    const history = recentCloses.map((v, i) => {
-      const d = recentTs[i] ? new Date(recentTs[i] * 1000) : new Date();
-      return {
-        date: `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`,
-        val: parseFloat(v.toFixed(3))
-      };
-    });
-
-    return {
-      current: parseFloat(current.toFixed(2)),
-      ma200:   ma200 ? parseFloat(ma200.toFixed(2)) : null,
-      ytd:     ytd   ? parseFloat(ytd.toFixed(1))   : null,
-      high52:  parseFloat(high52.toFixed(2)),
-      low52:   parseFloat(low52.toFixed(2)),
-      history,
-    };
-  } catch(e) {
-    console.error(`fetchQuote error [${symbol}]:`, e.message);
-    return null;
-  }
-}
-
-// Fear & Greed — CNN + 폴백
-async function fetchFearGreed() {
-  try {
-    const json = await fetchWithFallback(
-      "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
-    );
-    return Math.round(json?.fear_and_greed?.score ?? 15);
-  } catch {
-    return null;
-  }
-}
-
-// ─── CSS ───────────────────────────────────────────────────────
+// ??? CSS ???????????????????????????????????????????????????????
 const S = `
   @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
@@ -147,7 +64,7 @@ const S = `
   .by{background:rgba(234,179,8,.15);color:#EAB308;border:1px solid rgba(234,179,8,.3);}
   .bgy{background:rgba(100,116,139,.15);color:var(--gY);border:1px solid rgba(100,116,139,.3);}
   .bn{font-family:'Bebas Neue',cursive;font-size:46px;line-height:1;}
-  .bn.re{color:var(--re)} .bn.gr{color:var(--gr)} .bn.or{color:var(--or)} .bn.bl{color:var(--bl)}
+  .bn.re{color:var(--re)}.bn.gr{color:var(--gr)}.bn.or{color:var(--or)}.bn.bl{color:var(--bl)}
   .gb{height:7px;border-radius:4px;background:rgba(255,255,255,.1);overflow:hidden;margin:6px 0;}
   .gf{height:100%;border-radius:4px;transition:width .8s;}
   .sr{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bd);}
@@ -174,12 +91,10 @@ const S = `
   .mg{margin-bottom:16px;}
   .fb{display:flex;justify-content:space-between;align-items:center;}
   .sm{font-size:11px;color:var(--gY);}
-  /* 로딩 */
   .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:16px;}
   .spin{width:48px;height:48px;border:4px solid var(--bd);border-top-color:var(--gL);border-radius:50%;animation:spin 1s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg)}}
   .loading-txt{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--gY);}
-  /* 게이지 */
   .yield-card{background:var(--nv2);border-radius:12px;padding:18px;border:1px solid var(--bd);transition:transform .2s,box-shadow .2s;}
   .yield-card:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.4);}
   .yield-gauge-wrap{position:relative;margin:16px 0 10px;height:56px;}
@@ -188,7 +103,7 @@ const S = `
   .yield-fill{position:absolute;bottom:0;left:0;height:14px;border-radius:7px;transition:width .8s cubic-bezier(.4,0,.2,1);}
   .yield-line{position:absolute;bottom:-4px;width:2px;height:22px;background:rgba(255,255,255,.9);border-radius:1px;transform:translateX(-50%);}
   .yield-line-label{position:absolute;top:-22px;transform:translateX(-50%);font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(255,255,255,.7);white-space:nowrap;}
-  .yield-pin{position:absolute;bottom:10px;width:3px;height:28px;border-radius:2px;transform:translateX(-50%);transition:left .8s cubic-bezier(.4,0,.2,1);box-shadow:0 0 8px rgba(255,255,255,.6);}
+  .yield-pin{position:absolute;bottom:10px;width:3px;height:28px;border-radius:2px;transform:translateX(-50%);transition:left .8s;box-shadow:0 0 8px rgba(255,255,255,.6);}
   .yield-pin-label{position:absolute;top:-32px;transform:translateX(-50%);font-family:'Bebas Neue',cursive;font-size:18px;white-space:nowrap;}
   .yield-ticks{position:absolute;bottom:18px;left:0;right:0;display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--gY);}
   .yield-status{border-radius:8px;padding:10px 14px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:8px;margin-top:10px;border:1px solid;}
@@ -198,90 +113,69 @@ const S = `
   .yh-bar-wrap{flex:1;height:6px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden;}
   .yh-bar{height:100%;border-radius:3px;}
   .yh-val{font-family:'IBM Plex Mono',monospace;font-size:10px;min-width:36px;text-align:right;}
-  /* 실시간 뱃지 */
   .live-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:20px;padding:3px 10px;font-size:10px;color:var(--gr);font-family:'IBM Plex Mono',monospace;}
-  .err-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.3);border-radius:20px;padding:3px 10px;font-size:10px;color:var(--or);font-family:'IBM Plex Mono',monospace;}
+  .err-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.3);border-radius:20px;padding:3px 10px;font-size:10px;color:var(--or);font-family:'IBM Plex Mono',monospace;cursor:pointer;}
 `;
 
-const fmtW = n => n>=1e8?`${(n/1e8).toFixed(1)}억`:n>=1e4?`${(n/1e4).toFixed(0)}만`:`${n}`;
-const fmt2 = n => n != null ? n.toLocaleString(undefined, {minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
-const now = () => {
+const fmtW = n => n>=1e8?`${(n/1e8).toFixed(1)}??:n>=1e4?`${(n/1e4).toFixed(0)}留?:`${n}`;
+const fmt2 = n => n!=null ? n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '??;
+const nowStr = () => {
   const d = new Date();
   return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 };
 
-// ─── YieldGauge ────────────────────────────────────────────────
 function YieldGauge({ tnx }) {
   if (!tnx) return null;
-  const current = tnx.current, threshold = 4.5;
-  const MIN = 3.5, MAX = 5.5;
-  const isRisk = current >= threshold;
-  const pct = Math.min(100, Math.max(0, ((current - MIN) / (MAX - MIN) * 100))).toFixed(1);
-  const threshPct = ((threshold - MIN) / (MAX - MIN) * 100).toFixed(1);
+  const cur = tnx.current, thr = 4.5, MIN = 3.5, MAX = 5.5;
+  const isRisk = cur >= thr;
+  const pct = Math.min(100, Math.max(0, (cur-MIN)/(MAX-MIN)*100)).toFixed(1);
+  const thrPct = ((thr-MIN)/(MAX-MIN)*100).toFixed(1);
   const pinColor = isRisk ? '#EF4444' : '#22C55E';
   const fillGrad = isRisk ? 'linear-gradient(90deg,#22C55E,#EAB308 40%,#EF4444)' : 'linear-gradient(90deg,#22C55E,#4ADE80)';
-  const maxH = tnx.history ? Math.max(...tnx.history.map(h=>h.val)) : current;
+  const maxH = tnx.history ? Math.max(...tnx.history.map(h=>h.val)) : cur;
   return (
     <div className="yield-card">
-      <div className="ct">미국 10년물 국채 금리 (US10Y) — 실시간</div>
+      <div className="ct">誘멸뎅 10?꾨Ъ 援?콈 湲덈━ (US10Y) ???ㅼ떆媛?/div>
       <div className="fb" style={{marginBottom:4}}>
         <div>
-          <div className={`bn ${isRisk?'re':'gr'}`} style={{fontSize:46}}>{current.toFixed(3)}%</div>
+          <div className={`bn ${isRisk?'re':'gr'}`}>{cur.toFixed(3)}%</div>
           <div className="sm" style={{marginTop:3}}>
-            기준선 {threshold}% 대비&nbsp;
+            湲곗???{thr}% ?鍮?nbsp;
             <span style={{color:isRisk?'var(--re)':'var(--gr)',fontWeight:700}}>
-              {isRisk ? `+${(current-threshold).toFixed(3)}%` : `-${(threshold-current).toFixed(3)}%`}
+              {isRisk?`+${(cur-thr).toFixed(3)}%`:`-${(thr-cur).toFixed(3)}%`}
             </span>
           </div>
         </div>
         <span className={`bdg ${isRisk?'br':'bg'}`} style={{fontSize:12,padding:'5px 14px'}}>
-          {isRisk ? '⚠️ 위험 구간' : '✅ 안정 구간'}
+          {isRisk?'?좑툘 ?꾪뿕 援ш컙':'???덉젙 援ш컙'}
         </span>
       </div>
       <div className="yield-gauge-wrap">
-        <div className="yield-ticks">
-          {['3.5','3.8','4.0','4.2','4.4','4.5','4.7','5.0','5.2','5.5'].map((t,i)=><span key={i}>{t}</span>)}
-        </div>
+        <div className="yield-ticks">{['3.5','3.8','4.0','4.2','4.4','4.5','4.7','5.0','5.2','5.5'].map((t,i)=><span key={i}>{t}</span>)}</div>
         <div className="yield-track"/>
         <div className="yield-fill" style={{width:`${pct}%`,background:fillGrad}}/>
-        <div className="yield-line" style={{left:`${threshPct}%`}}>
-          <div className="yield-line-label" style={{left:'50%'}}>4.5%</div>
-        </div>
+        <div className="yield-line" style={{left:`${thrPct}%`}}><div className="yield-line-label" style={{left:'50%'}}>4.5%</div></div>
         <div className="yield-pin" style={{left:`${pct}%`,background:pinColor}}/>
-        <div className="yield-pin-label" style={{left:`${pct}%`,color:pinColor}}>{current.toFixed(3)}%</div>
+        <div className="yield-pin-label" style={{left:`${pct}%`,color:pinColor}}>{cur.toFixed(3)}%</div>
       </div>
-      <div className="yield-status" style={{
-        background:isRisk?'rgba(239,68,68,.1)':'rgba(34,197,94,.1)',
-        borderColor:isRisk?'rgba(239,68,68,.35)':'rgba(34,197,94,.35)',
-        color:isRisk?'#FCA5A5':'#86EFAC'
-      }}>
-        <span style={{fontSize:16}}>{isRisk?'🔴':'🟢'}</span>
-        <div>{isRisk
-          ? `현재 ${current.toFixed(3)}% — 4.5% 초과. 성장주 하락 압력 증가.`
-          : `현재 ${current.toFixed(3)}% — 4.5% 미만. 상대적 안정 구간.`
-        }</div>
+      <div className="yield-status" style={{background:isRisk?'rgba(239,68,68,.1)':'rgba(34,197,94,.1)',borderColor:isRisk?'rgba(239,68,68,.35)':'rgba(34,197,94,.35)',color:isRisk?'#FCA5A5':'#86EFAC'}}>
+        <span style={{fontSize:16}}>{isRisk?'?뵶':'?윟'}</span>
+        <div>{isRisk?`?꾩옱 ${cur.toFixed(3)}% ??4.5% 珥덇낵. ?깆옣二??섎씫 ?뺣젰 利앷?.`:`?꾩옱 ${cur.toFixed(3)}% ??4.5% 誘몃쭔. ?곷????덉젙 援ш컙.`}</div>
       </div>
-      {tnx.history && (
-        <div style={{marginTop:12}}>
-          <div style={{fontSize:10,color:'var(--gY)',marginBottom:6,fontFamily:'IBM Plex Mono',letterSpacing:1}}>최근 추이</div>
-          {tnx.history.map((h,i)=>{
-            const hPct = (h.val/maxH*100).toFixed(0);
-            const hRisk = h.val >= threshold;
-            return (
-              <div className="yh-row" key={i}>
-                <span className="yh-date">{h.date}</span>
-                <div className="yh-bar-wrap"><div className="yh-bar" style={{width:`${hPct}%`,background:hRisk?'var(--re)':'var(--gr)'}}/></div>
-                <span className="yh-val" style={{color:hRisk?'var(--re)':'var(--gr)'}}>{h.val}%</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {tnx.history&&<div style={{marginTop:12}}>
+        <div style={{fontSize:10,color:'var(--gY)',marginBottom:6,fontFamily:'IBM Plex Mono',letterSpacing:1}}>理쒓렐 異붿씠</div>
+        {tnx.history.map((h,i)=>{
+          const hPct=(h.val/maxH*100).toFixed(0), hRisk=h.val>=thr;
+          return <div className="yh-row" key={i}>
+            <span className="yh-date">{h.date}</span>
+            <div className="yh-bar-wrap"><div className="yh-bar" style={{width:`${hPct}%`,background:hRisk?'var(--re)':'var(--gr)'}}/></div>
+            <span className="yh-val" style={{color:hRisk?'var(--re)':'var(--gr)'}}>{h.val}%</span>
+          </div>;
+        })}
+      </div>}
       <div style={{marginTop:12,display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-        {[
-          {label:'4.5% 이상 (위험)',desc:'성장주·레버리지 부담↑\n채권 매력도 증가',c:'var(--re)',bg:'rgba(239,68,68,.08)'},
-          {label:'4.5% 미만 (안정)',desc:'주식 밸류에이션 지지\n레버리지 진입 환경 개선',c:'var(--gr)',bg:'rgba(34,197,94,.08)'},
-        ].map((b,i)=>(
+        {[{label:'4.5% ?댁긽 (?꾪뿕)',desc:'?깆옣二셋룸젅踰꾨━吏 遺?닳넁\n梨꾧텒 留ㅻ젰??利앷?',c:'var(--re)',bg:'rgba(239,68,68,.08)'},
+          {label:'4.5% 誘몃쭔 (?덉젙)',desc:'二쇱떇 諛몃쪟?먯씠??吏吏\n?덈쾭由ъ? 吏꾩엯 ?섍꼍 媛쒖꽑',c:'var(--gr)',bg:'rgba(34,197,94,.08)'}].map((b,i)=>(
           <div key={i} style={{background:b.bg,borderRadius:8,padding:'9px 11px',border:`1px solid ${b.c}33`}}>
             <div style={{fontSize:10,fontWeight:700,color:b.c,marginBottom:3}}>{b.label}</div>
             <div style={{fontSize:10,color:'var(--gY)',lineHeight:1.5,whiteSpace:'pre-line'}}>{b.desc}</div>
@@ -292,116 +186,75 @@ function YieldGauge({ tnx }) {
   );
 }
 
-// ─── T1: 시장현황 ──────────────────────────────────────────────
-function T1({ D, fg }) {
+function T1({D,fg}) {
   const tnxOk = D.tnx?.current < 4.5;
+  const ndxOk = D.ndx?.current > D.ndx?.ma200;
   const sigs = [
-    {l:"S&P500 vs 200일선", v:`${fmt2(D.sp500?.current)} / ${fmt2(D.sp500?.ma200)}`, s: D.sp500?.current > D.sp500?.ma200 ? 'GREEN' : 'RED'},
-    {l:"NDX vs 200일선",    v:`${fmt2(D.ndx?.current)} / ${fmt2(D.ndx?.ma200)}`,     s: D.ndx?.current > D.ndx?.ma200   ? 'GREEN' : 'RED'},
-    {l:"Fear & Greed",      v:`${fg ?? '—'} ${fg < 20 ? '— 극단적 공포' : fg < 40 ? '— 공포' : fg < 60 ? '— 중립' : '— 탐욕'}`, s: fg != null && fg < 20 ? 'YELLOW' : 'RED'},
-    {l:"10년물 국채 금리",  v:`${D.tnx?.current?.toFixed(3) ?? '—'}%`,               s: tnxOk ? 'GREEN' : 'RED'},
-    {l:"VIX 변동성",        v:`${fmt2(D.vix?.current)}`,                              s: D.vix?.current < 20 ? 'GREEN' : 'RED'},
-    {l:"Gold 안전자산",     v:`$${fmt2(D.gold?.current)}`,                            s: 'YELLOW'},
+    {l:"S&P500 vs 200?쇱꽑", v:`${fmt2(D.sp500?.current)} / ${fmt2(D.sp500?.ma200)}`, s:D.sp500?.current>D.sp500?.ma200?'GREEN':'RED'},
+    {l:"NDX vs 200?쇱꽑",    v:`${fmt2(D.ndx?.current)} / ${fmt2(D.ndx?.ma200)}`,     s:ndxOk?'GREEN':'RED'},
+    {l:"Fear & Greed",      v:`${fg??'??} ${fg<20?'??洹밸떒??怨듯룷':fg<40?'??怨듯룷':fg<60?'??以묐┰':'???먯슃'}`, s:fg!=null&&fg<20?'YELLOW':'RED'},
+    {l:"10?꾨Ъ 援?콈 湲덈━",  v:`${D.tnx?.current?.toFixed(3)??'??}%`,                 s:tnxOk?'GREEN':'RED'},
+    {l:"VIX 蹂?숈꽦",        v:`${fmt2(D.vix?.current)}`,                              s:D.vix?.current<20?'GREEN':'RED'},
+    {l:"Gold ?덉쟾?먯궛",     v:`$${fmt2(D.gold?.current)}`,                            s:'YELLOW'},
   ];
-  const ok = sigs.filter(s=>s.s==='GREEN').length;
-  const score = Math.round(ok/sigs.length*100);
-  const sc = s => s==='GREEN'?'var(--gr)':s==='YELLOW'?'#EAB308':'var(--re)';
-  const bc = s => s==='GREEN'?'bg':s==='YELLOW'?'by':'br';
-  const ndxBelow = D.ndx?.current < D.ndx?.ma200;
-
+  const ok=sigs.filter(s=>s.s==='GREEN').length;
+  const score=Math.round(ok/sigs.length*100);
+  const sc=s=>s==='GREEN'?'var(--gr)':s==='YELLOW'?'#EAB308':'var(--re)';
+  const bc=s=>s==='GREEN'?'bg':s==='YELLOW'?'by':'br';
   return (
     <div>
       <div className="g5 mg">
-        <div className="card">
-          <div className="ct">진입 신호</div>
-          <div className={`bn ${score>50?'gr':'re'}`}>{score}%</div>
-          <div className="sm" style={{marginTop:6}}>{ok}/{sigs.length} 충족</div>
-          <div className="gb"><div className="gf" style={{width:`${score}%`,background:score>50?'var(--gr)':'var(--re)'}}/></div>
-          <span className={`bdg ${score>50?'bg':'br'}`}>{score>50?'진입 검토':'현금 보유'}</span>
-        </div>
-        <div className="card">
-          <div className="ct">Fear & Greed</div>
-          <div className="bn or">{fg ?? '—'}</div>
-          <div className="sm" style={{marginTop:6}}>{fg < 20 ? '극단적 공포' : fg < 40 ? '공포' : fg < 60 ? '중립' : '탐욕'}</div>
-          <div className="gb"><div className="gf" style={{width:`${fg ?? 0}%`,background:'linear-gradient(90deg,var(--gr),var(--or),var(--re))'}}/></div>
-          <div className="sm">한 자릿수 = 역대급 기회</div>
-        </div>
-        <div className="card">
-          <div className="ct">NDX 200일선</div>
-          <div className={`bn ${ndxBelow?'re':'gr'}`}>{D.ndx?.current?.toLocaleString() ?? '—'}</div>
-          <div className="sm" style={{marginTop:6}}>200MA: {D.ndx?.ma200?.toLocaleString() ?? '—'}</div>
-          <div className="gb"><div className="gf" style={{width:`${D.ndx?.current && D.ndx?.ma200 ? Math.min(100,(D.ndx.current/D.ndx.ma200*100).toFixed(0)) : 0}%`,background:ndxBelow?'var(--re)':'var(--gr)'}}/></div>
-          <span className={`bdg ${ndxBelow?'br':'bg'}`}>{ndxBelow?'200일선 하회':'200일선 상회'}</span>
-        </div>
-        <div className="card" style={{border: tnxOk ? '1px solid rgba(34,197,94,.4)' : '1px solid rgba(239,68,68,.4)'}}>
-          <div className="ct">US 10Y Yield</div>
-          <div className={`bn ${tnxOk?'gr':'re'}`}>{D.tnx?.current?.toFixed(3) ?? '—'}%</div>
-          <div className="sm" style={{marginTop:6}}>기준선 4.5%</div>
-          <div className="gb"><div className="gf" style={{width:`${D.tnx?.current ? ((D.tnx.current-3.5)/(5.5-3.5)*100).toFixed(0) : 0}%`,background:tnxOk?'#22C55E':'linear-gradient(90deg,#22C55E,#EF4444)'}}/></div>
-          <span className={`bdg ${tnxOk?'bg':'br'}`}>{tnxOk?'안정':'위험'}</span>
-        </div>
-        <div className="card">
-          <div className="ct">VIX</div>
-          <div className={`bn ${D.vix?.current < 20 ? 'gr' : 'or'}`}>{fmt2(D.vix?.current)}</div>
-          <div className="sm" style={{marginTop:6}}>{D.vix?.current < 20 ? '안정' : '고변동성'}</div>
-          <div className="gb"><div className="gf" style={{width:`${Math.min(100,(D.vix?.current??0)*2)}%`,background:'var(--or)'}}/></div>
-          <div className="sm">20 이하 = 안정 신호</div>
-        </div>
+        {[
+          {ct:'吏꾩엯 ?좏샇', val:`${score}%`, sub:`${ok}/${sigs.length} 異⑹”`, color:score>50?'gr':'re', bar:score, barColor:score>50?'var(--gr)':'var(--re)', badge:score>50?'bg':'br', badgeTxt:score>50?'吏꾩엯 寃??:'?꾧툑 蹂댁쑀'},
+          {ct:'Fear & Greed', val:fg??'??, sub:fg<20?'洹밸떒??怨듯룷':fg<40?'怨듯룷':fg<60?'以묐┰':'?먯슃', color:'or', bar:fg??0, barColor:'linear-gradient(90deg,var(--gr),var(--or),var(--re))', badge:fg<20?'by':'br', badgeTxt:'吏??},
+          {ct:'NDX 200?쇱꽑', val:(D.ndx?.current?.toLocaleString()??'??), sub:`200MA: ${D.ndx?.ma200?.toLocaleString()??'??}`, color:ndxOk?'gr':'re', bar:D.ndx?.current&&D.ndx?.ma200?Math.min(100,(D.ndx.current/D.ndx.ma200*100).toFixed(0)):0, barColor:ndxOk?'var(--gr)':'var(--re)', badge:ndxOk?'bg':'br', badgeTxt:ndxOk?'200?쇱꽑 ?곹쉶':'200?쇱꽑 ?섑쉶'},
+          {ct:'US 10Y Yield', val:`${D.tnx?.current?.toFixed(3)??'??}%`, sub:'湲곗???4.5%', color:tnxOk?'gr':'re', bar:D.tnx?.current?((D.tnx.current-3.5)/(5.5-3.5)*100).toFixed(0):0, barColor:tnxOk?'#22C55E':'linear-gradient(90deg,#22C55E,#EF4444)', badge:tnxOk?'bg':'br', badgeTxt:tnxOk?'?덉젙':'?꾪뿕'},
+          {ct:'VIX', val:fmt2(D.vix?.current), sub:D.vix?.current<20?'?덉젙':'怨좊??숈꽦', color:D.vix?.current<20?'gr':'or', bar:Math.min(100,(D.vix?.current??0)*2), barColor:'var(--or)', badge:D.vix?.current<20?'bg':'by', badgeTxt:'蹂?숈꽦'},
+        ].map((k,i)=>(
+          <div className="card" key={i}>
+            <div className="ct">{k.ct}</div>
+            <div className={`bn ${k.color}`}>{k.val}</div>
+            <div className="sm" style={{marginTop:6}}>{k.sub}</div>
+            <div className="gb"><div className="gf" style={{width:`${k.bar}%`,background:k.barColor}}/></div>
+            <span className={`bdg ${k.badge}`}>{k.badgeTxt}</span>
+          </div>
+        ))}
       </div>
-
       <div className="mg"><YieldGauge tnx={D.tnx}/></div>
-
       <div className="g2">
         <div className="card">
-          <div className="ct">신호 체크판</div>
+          <div className="ct">?좏샇 泥댄겕??/div>
           {sigs.map((s,i)=>(
             <div className="sr" key={i}>
               <span className="sl">{s.l}</span>
               <div style={{display:'flex',alignItems:'center',gap:7}}>
                 <span className="sv" style={{color:sc(s.s),fontSize:10}}>{s.v}</span>
-                <span className={`bdg ${bc(s.s)}`} style={{fontSize:9,padding:'1px 7px'}}>{s.s==='GREEN'?'OK':s.s==='YELLOW'?'준비':'NG'}</span>
+                <span className={`bdg ${bc(s.s)}`} style={{fontSize:9,padding:'1px 7px'}}>{s.s==='GREEN'?'OK':s.s==='YELLOW'?'以鍮?:'NG'}</span>
               </div>
             </div>
           ))}
         </div>
         <div>
           <div className="card mg">
-            <div className="ct">레버리지 ETF 현황</div>
-            {[
-              {n:'TQQQ',d:'나스닥100 3배',data:D.tqqq},
-              {n:'FNGU',d:'FANG+ 3배',   data:D.fngu},
-              {n:'SOXL',d:'반도체 3배',   data:D.soxl},
-            ].map((e,i)=>(
+            <div className="ct">?덈쾭由ъ? ETF ?꾪솴</div>
+            {[{n:'TQQQ',d:'?섏뒪??00 3諛?,data:D.tqqq},{n:'FNGU',d:'FANG+ 3諛?,data:D.fngu},{n:'SOXL',d:'諛섎룄泥?3諛?,data:D.soxl}].map((e,i)=>(
               <div key={i} style={{padding:'8px 0',borderBottom:i<2?'1px solid var(--bd)':'none'}}>
                 <div className="fb">
-                  <div>
-                    <span style={{fontFamily:'IBM Plex Mono',fontWeight:700,color:'var(--gL)'}}>{e.n}</span>
-                    <span className="sm" style={{marginLeft:7}}>{e.d}</span>
-                  </div>
+                  <div><span style={{fontFamily:'IBM Plex Mono',fontWeight:700,color:'var(--gL)'}}>{e.n}</span><span className="sm" style={{marginLeft:7}}>{e.d}</span></div>
                   <div style={{textAlign:'right'}}>
                     <div style={{fontFamily:'IBM Plex Mono',fontSize:15,fontWeight:700}}>${fmt2(e.data?.current)}</div>
-                    <div style={{fontSize:10,color:e.data?.ytd>=0?'var(--gr)':'var(--re)'}}>{e.data?.ytd!=null?(e.data.ytd>0?'+':'')+e.data.ytd+'% YTD':'—'}</div>
+                    <div style={{fontSize:10,color:e.data?.ytd>=0?'var(--gr)':'var(--re)'}}>{e.data?.ytd!=null?(e.data.ytd>0?'+':'')+e.data.ytd+'% YTD':'??}</div>
                   </div>
                 </div>
-                {e.data?.high52 && e.data?.low52 && (
-                  <div className="gb" style={{marginTop:4}}>
-                    <div className="gf" style={{width:`${(((e.data.current-e.data.low52)/(e.data.high52-e.data.low52))*100).toFixed(0)}%`,background:'var(--bl)'}}/>
-                  </div>
-                )}
+                {e.data?.high52&&e.data?.low52&&<div className="gb" style={{marginTop:4}}><div className="gf" style={{width:`${(((e.data.current-e.data.low52)/(e.data.high52-e.data.low52))*100).toFixed(0)}%`,background:'var(--bl)'}}/></div>}
               </div>
             ))}
-            {ndxBelow && <div className="wb" style={{marginTop:10,fontSize:11}}>🔴 200일선 하위 — 레버리지 ETF 보유 금지</div>}
+            {!ndxOk&&<div className="wb" style={{marginTop:10,fontSize:11}}>?뵶 200?쇱꽑 ?섏쐞 ???덈쾭由ъ? ETF 蹂댁쑀 湲덉?</div>}
           </div>
           <div className="card">
-            <div className="ct">뱅브로 원칙 — 지금 배분</div>
-            <div className="gb2" style={{fontSize:11}}>200일선 아래 = 현금이 무기. 기다리는 것이 가장 용감한 행동.</div>
-            {[
-              {a:'달러 예금/MMF',    r:'60%',amt:'6억',   ok:true},
-              {a:'GLD 금 ETF',      r:'20%',amt:'2억',   ok:true},
-              {a:'QQQ 소량',        r:'10%',amt:'1억',   ok:true},
-              {a:'원화 현금',       r:'10%',amt:'1억',   ok:true},
-              {a:'TQQQ/FNGU/SOXL', r:'0%', amt:'절대 금지',ok:false},
-            ].map((r,i)=>(
+            <div className="ct">諭낅툕濡??먯튃 ??吏湲?諛곕텇</div>
+            <div className="gb2" style={{fontSize:11}}>200?쇱꽑 ?꾨옒 = ?꾧툑??臾닿린. 湲곕떎由щ뒗 寃껋씠 媛???⑷컧???됰룞.</div>
+            {[{a:'?щ윭 ?덇툑/MMF',r:'60%',amt:'6??,ok:true},{a:'GLD 湲?ETF',r:'20%',amt:'2??,ok:true},{a:'QQQ ?뚮웾',r:'10%',amt:'1??,ok:true},{a:'?먰솕 ?꾧툑',r:'10%',amt:'1??,ok:true},{a:'TQQQ/FNGU/SOXL',r:'0%',amt:'?덈? 湲덉?',ok:false}].map((r,i)=>(
               <div className="sr" key={i}>
                 <span className="sl">{r.a}</span>
                 <div style={{display:'flex',gap:7,alignItems:'center'}}>
@@ -417,88 +270,56 @@ function T1({ D, fg }) {
   );
 }
 
-// ─── T2: 시뮬레이터 ────────────────────────────────────────────
-function T2({ D }) {
+function T2({D}) {
   const [cap,setCap]=useState(1000000000);
   const [tpct,setTpct]=useState(50);
   const [fpct,setFpct]=useState(15);
   const [ndxR,setNdxR]=useState(80);
   const [yrs,setYrs]=useState(3);
-  const tR=ndxR*2.7,fR=ndxR*3.2,qR=ndxR*0.95;
-  const qpct=100-tpct-fpct;
+  const tR=ndxR*2.7,fR=ndxR*3.2,qR=ndxR*0.95,qpct=100-tpct-fpct;
   const tAmt=cap*tpct/100,fAmt=cap*fpct/100,qAmt=cap*qpct/100;
   const ftT=tAmt*(1+tR/100),ftF=fAmt*(1+fR/100),ftQ=qAmt*(1+qR/100);
-  const total=ftT+ftF+ftQ;
-  const totR=((total-cap)/cap*100).toFixed(1);
-  const bT=tAmt*(1-0.55),bF=fAmt*(1-0.65),bQ=qAmt*(1-0.20);
-  const bTotal=bT+bF+bQ;
-  const bR=((bTotal-cap)/cap*100).toFixed(1);
+  const total=ftT+ftF+ftQ,totR=((total-cap)/cap*100).toFixed(1);
+  const bTotal=tAmt*0.45+fAmt*0.35+qAmt*0.80,bR=((bTotal-cap)/cap*100).toFixed(1);
   return (
     <div>
       <div className="g2">
         <div className="card">
-          <div className="ct">포트폴리오 설정</div>
-          {[
-            {l:"투자 원금",      v:fmtW(cap),                          min:1e8, max:5e9,step:1e8,val:cap, set:setCap},
-            {l:"TQQQ 비중",     v:`${tpct}% (${fmtW(cap*tpct/100)})`, min:0,   max:80, step:5,  val:tpct,set:setTpct},
-            {l:"FNGU 비중",     v:`${fpct}% (${fmtW(cap*fpct/100)})`, min:0,   max:40, step:5,  val:fpct,set:setFpct},
-            {l:"나스닥 수익률", v:`+${ndxR}%`,                         min:-50, max:300,step:10, val:ndxR,set:setNdxR},
-            {l:"투자 기간",     v:`${yrs}년`,                          min:1,   max:10, step:1,  val:yrs, set:setYrs},
-          ].map((s,i)=>(
-            <div className="sw" key={i}>
-              <label><span>{s.l}</span><span style={{color:'var(--gL)',fontFamily:'IBM Plex Mono'}}>{s.v}</span></label>
-              <input type="range" min={s.min} max={s.max} step={s.step} value={s.val} onChange={e=>s.set(+e.target.value)}/>
-            </div>
+          <div className="ct">?ы듃?대━???ㅼ젙</div>
+          {[{l:"?ъ옄 ?먭툑",v:fmtW(cap),min:1e8,max:5e9,step:1e8,val:cap,set:setCap},{l:"TQQQ 鍮꾩쨷",v:`${tpct}% (${fmtW(cap*tpct/100)})`,min:0,max:80,step:5,val:tpct,set:setTpct},{l:"FNGU 鍮꾩쨷",v:`${fpct}% (${fmtW(cap*fpct/100)})`,min:0,max:40,step:5,val:fpct,set:setFpct},{l:"?섏뒪???섏씡瑜?,v:`+${ndxR}%`,min:-50,max:300,step:10,val:ndxR,set:setNdxR},{l:"?ъ옄 湲곌컙",v:`${yrs}??,min:1,max:10,step:1,val:yrs,set:setYrs}].map((s,i)=>(
+            <div className="sw" key={i}><label><span>{s.l}</span><span style={{color:'var(--gL)',fontFamily:'IBM Plex Mono'}}>{s.v}</span></label><input type="range" min={s.min} max={s.max} step={s.step} value={s.val} onChange={e=>s.set(+e.target.value)}/></div>
           ))}
-          <div className="sr"><span className="sl">QQQ 비중 (자동)</span>
-            <span style={{fontFamily:'IBM Plex Mono',fontSize:12,color:'var(--gL)'}}>{qpct}% ({fmtW(cap*qpct/100)})</span>
-          </div>
-          <div className="ib" style={{marginTop:12,fontSize:11}}>TQQQ ≈ 나스닥×2.7배 / FNGU ≈ 나스닥×3.2배 (음의복리 감안)</div>
-          {D.tqqq?.current && (
-            <div style={{marginTop:8,background:'var(--nv3)',borderRadius:8,padding:'8px 12px',fontSize:11,color:'var(--gY)'}}>
-              실시간 — TQQQ: <span style={{color:'var(--gL)',fontFamily:'IBM Plex Mono'}}>${fmt2(D.tqqq.current)}</span>&nbsp;
-              FNGU: <span style={{color:'var(--gL)',fontFamily:'IBM Plex Mono'}}>${fmt2(D.fngu?.current)}</span>
-            </div>
-          )}
+          <div className="sr"><span className="sl">QQQ 鍮꾩쨷 (?먮룞)</span><span style={{fontFamily:'IBM Plex Mono',fontSize:12,color:'var(--gL)'}}>{qpct}% ({fmtW(cap*qpct/100)})</span></div>
+          <div className="ib" style={{marginTop:12,fontSize:11}}>TQQQ ???섏뒪?Γ?.7諛?/ FNGU ???섏뒪?Γ?.2諛?(?뚯쓽蹂듬━ 媛먯븞)</div>
+          {D.tqqq?.current&&<div style={{marginTop:8,background:'var(--nv3)',borderRadius:8,padding:'8px 12px',fontSize:11,color:'var(--gY)'}}>
+            ?ㅼ떆媛???TQQQ: <span style={{color:'var(--gL)',fontFamily:'IBM Plex Mono'}}>${fmt2(D.tqqq.current)}</span>&nbsp;FNGU: <span style={{color:'var(--gL)',fontFamily:'IBM Plex Mono'}}>${fmt2(D.fngu?.current)}</span>
+          </div>}
         </div>
         <div>
           <div className="card mg">
-            <div className="ct">낙관 시나리오</div>
+            <div className="ct">?숆? ?쒕굹由ъ삤</div>
             <div className="fb" style={{marginBottom:10}}>
-              <div><div className="sm">최종 자산</div><div className="bn gr">{fmtW(total)}</div></div>
-              <div style={{textAlign:'right'}}>
-                <div className="sm">총 수익률</div>
-                <div style={{fontFamily:'IBM Plex Mono',fontSize:26,fontWeight:700,color:total>cap?'var(--gr)':'var(--re)'}}>{totR>0?'+':''}{totR}%</div>
-              </div>
+              <div><div className="sm">理쒖쥌 ?먯궛</div><div className="bn gr">{fmtW(total)}</div></div>
+              <div style={{textAlign:'right'}}><div className="sm">珥??섏씡瑜?/div><div style={{fontFamily:'IBM Plex Mono',fontSize:26,fontWeight:700,color:total>cap?'var(--gr)':'var(--re)'}}>{totR>0?'+':''}{totR}%</div></div>
             </div>
-            <div className="rb">
-              {[['원금',fmtW(cap)],['TQQQ 수익',fmtW(ftT-tAmt)],['FNGU 수익',fmtW(ftF-fAmt)],['QQQ 수익',fmtW(ftQ-qAmt)],['최종 합계',fmtW(total)]].map(([l,v],i)=>(
-                <div className="rr" key={i}><span className="rl">{l}</span><span className="rv">{v}</span></div>
-              ))}
-            </div>
+            <div className="rb">{[['?먭툑',fmtW(cap)],['TQQQ ?섏씡',fmtW(ftT-tAmt)],['FNGU ?섏씡',fmtW(ftF-fAmt)],['QQQ ?섏씡',fmtW(ftQ-qAmt)],['理쒖쥌 ?⑷퀎',fmtW(total)]].map(([l,v],i)=>(
+              <div className="rr" key={i}><span className="rl">{l}</span><span className="rv">{v}</span></div>
+            ))}</div>
           </div>
           <div className="card">
-            <div className="ct">폭락 시나리오 (200일선 무시 진입 시)</div>
+            <div className="ct">??씫 ?쒕굹由ъ삤 (200?쇱꽑 臾댁떆 吏꾩엯 ??</div>
             <div className="fb" style={{marginBottom:10}}>
-              <div><div className="sm">최종 자산</div><div className="bn re">{fmtW(bTotal)}</div></div>
-              <div style={{textAlign:'right'}}>
-                <div className="sm">손실률</div>
-                <div style={{fontFamily:'IBM Plex Mono',fontSize:26,fontWeight:700,color:'var(--re)'}}>{bR}%</div>
-              </div>
+              <div><div className="sm">理쒖쥌 ?먯궛</div><div className="bn re">{fmtW(bTotal)}</div></div>
+              <div style={{textAlign:'right'}}><div className="sm">?먯떎瑜?/div><div style={{fontFamily:'IBM Plex Mono',fontSize:26,fontWeight:700,color:'var(--re)'}}>{bR}%</div></div>
             </div>
-            <div className="wb" style={{fontSize:11}}>TQQQ -55% / FNGU -65% / QQQ -20% 기준</div>
+            <div className="wb" style={{fontSize:11}}>TQQQ -55% / FNGU -65% / QQQ -20% 湲곗?</div>
           </div>
         </div>
       </div>
       <div className="card" style={{marginTop:14}}>
-        <div className="ct">역사적 TQQQ 저점 매수 수익률</div>
+        <div className="ct">??궗??TQQQ ???留ㅼ닔 ?섏씡瑜?/div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
-          {[
-            {ev:'2020.3 코로나',buy:'$8',  ret:'+1,038%',c:'var(--gr)'},
-            {ev:'2022.10 금리', buy:'$15', ret:'+287%',  c:'var(--gr)'},
-            {ev:'2025.4 관세',  buy:'$17', ret:'+253%',  c:'var(--gr)'},
-            {ev:'현재',buy:`$${fmt2(D.tqqq?.current)}`,ret:'대기 중',c:'var(--or)'},
-          ].map((h,i)=>(
+          {[{ev:'2020.3 肄붾줈??,buy:'$8',ret:'+1,038%',c:'var(--gr)'},{ev:'2022.10 湲덈━',buy:'$15',ret:'+287%',c:'var(--gr)'},{ev:'2025.4 愿??,buy:'$17',ret:'+253%',c:'var(--gr)'},{ev:'?꾩옱',buy:`$${fmt2(D.tqqq?.current)}`,ret:'?湲?以?,c:'var(--or)'}].map((h,i)=>(
             <div key={i} style={{background:'var(--nv3)',borderRadius:9,padding:12,textAlign:'center',border:'1px solid var(--bd)'}}>
               <div style={{fontSize:10,color:'var(--gY)',marginBottom:5}}>{h.ev}</div>
               <div style={{fontFamily:'IBM Plex Mono',fontSize:11,marginBottom:3}}>{h.buy}</div>
@@ -511,41 +332,38 @@ function T2({ D }) {
   );
 }
 
-// ─── T3: 바닥 신호판 ───────────────────────────────────────────
-function T3({ D, fg }) {
+function T3({D,fg}) {
   const [chk,setChk]=useState({});
   const tog=k=>setChk(p=>({...p,[k]:!p[k]}));
-  const tnxCur = D.tnx?.current ?? 4.5;
+  const tnxCur=D.tnx?.current??4.5;
   const sigs=[
-    {k:'s1',lbl:'Fear & Greed 한 자릿수(0~9) 진입',   desc:`현재 ${fg ?? '—'} — 극단 공포. 한 자릿수면 역대급 기회`,      cur:`현재 ${fg ?? '—'} (${fg < 10 ? '충족!' : '미충족'})`,  g:fg ?? 15,c:'var(--or)'},
-    {k:'s2',lbl:'HY Spread 5 이상에서 주간 꺾임',      desc:'꺾이는 순간이 공포 극점 통과 신호',                             cur:'수동 확인 필요',                                         g:40,c:'var(--re)'},
-    {k:'s3',lbl:'NDX 200일선 재돌파 2일 연속 ★핵심★', desc:`종가 ${D.ndx?.ma200?.toFixed(0) ?? '—'} 위에서 2일 연속`,      cur:`${D.ndx?.current?.toLocaleString() ?? '—'} (${D.ndx?.current > D.ndx?.ma200 ? '충족!' : '미충족'})`, g:D.ndx?.current && D.ndx?.ma200 ? Math.min(99,(D.ndx.current/D.ndx.ma200*100).toFixed(0)) : 99,c:'var(--re)'},
-    {k:'s4',lbl:'이란 협상 타결 or 호르무즈 재개',      desc:'근본 원인 해소 — 뉴스 직접 확인',                               cur:'수동 확인 필요',                                         g:30,c:'var(--bl)'},
-    {k:'s5',lbl:'VIX 20 이하 하락',                    desc:`현재 VIX ${fmt2(D.vix?.current)}`,                             cur:`${fmt2(D.vix?.current)} (${D.vix?.current < 20 ? '충족!' : '미충족'})`, g:Math.min(100,D.vix?.current*2 ?? 50),c:'var(--bl)'},
-    {k:'s6',lbl:'10년물 국채 금리 4.5% 이하 안정',     desc:`현재 ${tnxCur.toFixed(3)}%. 4.5% 넘으면 성장주 밸류 압박`,     cur:`${tnxCur.toFixed(3)}% (${tnxCur < 4.5 ? '충족!' : '미충족'})`, g:Math.round((tnxCur-3.5)/(5.5-3.5)*100),c:tnxCur>=4.5?'var(--re)':'var(--gr)'},
+    {k:'s1',lbl:'Fear & Greed ???먮┸??0~9) 吏꾩엯',desc:`?꾩옱 ${fg??'??} ??洹밸떒 怨듯룷`,cur:`?꾩옱 ${fg??'??} (${fg<10?'異⑹”!':'誘몄땐議?})`,g:fg??15,c:'var(--or)'},
+    {k:'s2',lbl:'HY Spread 5 ?댁긽?먯꽌 二쇨컙 爰얠엫',desc:'爰얠씠???쒓컙??怨듯룷 洹뱀젏 ?듦낵 ?좏샇',cur:'?섎룞 ?뺤씤 ?꾩슂',g:40,c:'var(--re)'},
+    {k:'s3',lbl:'NDX 200?쇱꽑 ?щ룎??2???곗냽 ?낇빑?р쁾',desc:`醫낃? ${D.ndx?.ma200?.toFixed(0)??'??} ?꾩뿉??2???곗냽`,cur:`${D.ndx?.current?.toLocaleString()??'??} (${D.ndx?.current>D.ndx?.ma200?'異⑹”!':'誘몄땐議?})`,g:D.ndx?.current&&D.ndx?.ma200?Math.min(99,(D.ndx.current/D.ndx.ma200*100).toFixed(0)):99,c:'var(--re)'},
+    {k:'s4',lbl:'?대? ?묒긽 ?寃?or ?몃Ⅴ臾댁쫰 ?ш컻',desc:'洹쇰낯 ?먯씤 ?댁냼 ???댁뒪 吏곸젒 ?뺤씤',cur:'?섎룞 ?뺤씤 ?꾩슂',g:30,c:'var(--bl)'},
+    {k:'s5',lbl:'VIX 20 ?댄븯 ?섎씫',desc:`?꾩옱 VIX ${fmt2(D.vix?.current)}`,cur:`${fmt2(D.vix?.current)} (${D.vix?.current<20?'異⑹”!':'誘몄땐議?})`,g:Math.min(100,(D.vix?.current??25)*2),c:'var(--bl)'},
+    {k:'s6',lbl:'10?꾨Ъ 援?콈 湲덈━ 4.5% ?댄븯 ?덉젙',desc:`?꾩옱 ${tnxCur.toFixed(3)}%`,cur:`${tnxCur.toFixed(3)}% (${tnxCur<4.5?'異⑹”!':'誘몄땐議?})`,g:Math.round((tnxCur-3.5)/(5.5-3.5)*100),c:tnxCur>=4.5?'var(--re)':'var(--gr)'},
   ];
   const score=Object.values(chk).filter(Boolean).length;
   const verdict=()=>{
-    if(score>=5) return{ic:'🚀',t:'진입 가능!',d:'핵심 신호 충족\n소액 분할 진입 검토',c:'var(--gr)',bg:'rgba(34,197,94,.1)',bc:'rgba(34,197,94,.3)'};
-    if(score>=3) return{ic:'⚡',t:'준비 단계',d:'일부 신호 충족\n200일선 돌파 대기',c:'var(--or)',bg:'rgba(249,115,22,.1)',bc:'rgba(249,115,22,.3)'};
-    if(score>=1) return{ic:'⏳',t:'대기 중',d:'신호 수집 중\n현금 보유 유지',c:'var(--bl)',bg:'rgba(59,130,246,.1)',bc:'rgba(59,130,246,.3)'};
-    return {ic:'🛡️',t:'현금 보유',d:'진입 신호 없음\n현금이 무기입니다',c:'var(--gY)',bg:'rgba(100,116,139,.15)',bc:'rgba(100,116,139,.3)'};
+    if(score>=5)return{ic:'??',t:'吏꾩엯 媛??',d:'?듭떖 ?좏샇 異⑹”\n?뚯븸 遺꾪븷 吏꾩엯 寃??,c:'var(--gr)',bg:'rgba(34,197,94,.1)',bc:'rgba(34,197,94,.3)'};
+    if(score>=3)return{ic:'??,t:'以鍮??④퀎',d:'?쇰? ?좏샇 異⑹”\n200?쇱꽑 ?뚰뙆 ?湲?,c:'var(--or)',bg:'rgba(249,115,22,.1)',bc:'rgba(249,115,22,.3)'};
+    if(score>=1)return{ic:'??,t:'?湲?以?,d:'?좏샇 ?섏쭛 以?n?꾧툑 蹂댁쑀 ?좎?',c:'var(--bl)',bg:'rgba(59,130,246,.1)',bc:'rgba(59,130,246,.3)'};
+    return{ic:'?썳截?,t:'?꾧툑 蹂댁쑀',d:'吏꾩엯 ?좏샇 ?놁쓬\n?꾧툑??臾닿린?낅땲??,c:'var(--gY)',bg:'rgba(100,116,139,.15)',bc:'rgba(100,116,139,.3)'};
   };
   const v=verdict();
   return (
     <div>
       <div className="g2 mg">
         <div className="card" style={{textAlign:'center'}}>
-          <div className="ct">진입 신호 점수</div>
+          <div className="ct">吏꾩엯 ?좏샇 ?먯닔</div>
           <div className="bn" style={{fontSize:64,color:score>=5?'var(--gr)':score>=3?'var(--or)':score>=1?'var(--bl)':'var(--re)'}}>{score}/6</div>
-          <div className="sm" style={{marginTop:6}}>클릭으로 직접 체크</div>
-          <div style={{marginTop:10}}>
-            {[0,1,2,3,4,5].map(i=>(<div key={i} style={{height:5,borderRadius:3,marginBottom:3,background:i<score?'var(--gr)':'rgba(255,255,255,.1)'}}/>))}
-          </div>
-          <div className="gb2" style={{marginTop:12,fontSize:11}}>3개 이상 → 소량 진입 / 6개 모두 → 본격 진입</div>
+          <div className="sm" style={{marginTop:6}}>?대┃?쇰줈 吏곸젒 泥댄겕</div>
+          <div style={{marginTop:10}}>{[0,1,2,3,4,5].map(i=>(<div key={i} style={{height:5,borderRadius:3,marginBottom:3,background:i<score?'var(--gr)':'rgba(255,255,255,.1)'}}/>))}</div>
+          <div className="gb2" style={{marginTop:12,fontSize:11}}>3媛??댁긽 ???뚮웾 吏꾩엯 / 6媛?紐⑤몢 ??蹂멸꺽 吏꾩엯</div>
         </div>
         <div className="card" style={{textAlign:'center'}}>
-          <div className="ct">진입 판단</div>
+          <div className="ct">吏꾩엯 ?먮떒</div>
           <div style={{fontSize:36,marginBottom:8}}>{v.ic}</div>
           <div style={{padding:'14px',borderRadius:10,background:v.bg,border:`1px solid ${v.bc}`}}>
             <div style={{fontSize:18,fontWeight:900,color:v.c,marginBottom:4}}>{v.t}</div>
@@ -554,10 +372,10 @@ function T3({ D, fg }) {
         </div>
       </div>
       <div className="card">
-        <div className="ct">신호 체크리스트 (6개) — 클릭해서 체크</div>
+        <div className="ct">?좏샇 泥댄겕由ъ뒪??(6媛? ???대┃?댁꽌 泥댄겕</div>
         {sigs.map(s=>(
           <div key={s.k} className="ci" onClick={()=>tog(s.k)}>
-            <div className={`cb ${chk[s.k]?'ck':''}`}>{chk[s.k]&&<span style={{color:'#fff',fontSize:11,fontWeight:900}}>✓</span>}</div>
+            <div className={`cb ${chk[s.k]?'ck':''}`}>{chk[s.k]&&<span style={{color:'#fff',fontSize:11,fontWeight:900}}>??/span>}</div>
             <div style={{flex:1}}>
               <div style={{fontSize:12,fontWeight:700,color:chk[s.k]?s.c:'var(--wh)',marginBottom:2}}>{s.lbl}</div>
               <div style={{fontSize:10,color:'var(--gY)',marginBottom:4}}>{s.desc}</div>
@@ -571,53 +389,22 @@ function T3({ D, fg }) {
   );
 }
 
-// ─── T4: 체크리스트 ────────────────────────────────────────────
 function T4() {
   const [done,setDone]=useState({});
   const tog=k=>setDone(p=>({...p,[k]:!p[k]}));
   const secs=[
-    {t:'즉시 실행 (오늘)',items:[
-      {k:'a1',tx:'미래에셋 or 키움 해외주식 계좌 개설 신청'},
-      {k:'a2',tx:'레버리지 ETF 보유 여부 확인 → 보유 시 당일 매도'},
-      {k:'a3',tx:'여유자금 6억 달러 환전 → 달러 MMF 또는 달러 RP 가입'},
-      {k:'a4',tx:'GLD 2억 매수 (해외주식 계좌 세팅 후)'},
-      {k:'a5',tx:'QQQ 1억 소량 매수 (장기 확신 포지션)'},
-    ]},
-    {t:'이번 주 모니터링',items:[
-      {k:'b1',tx:'TradingView → NDX 일봉 → MA200 돌파 알림 등록'},
-      {k:'b2',tx:'CNN Fear & Greed 북마크'},
-      {k:'b3',tx:'FRED HY Spread 북마크'},
-      {k:'b4',tx:'10년물 국채 금리 모니터링 — 4.5% 돌파 시 주의'},
-    ]},
-    {t:'200일선 재돌파 시 실행',items:[
-      {k:'c1',tx:'돌파 확인 당일 종가 → TQQQ 2억 시장가 매수'},
-      {k:'c2',tx:'GLD 보유분 절반 익절 → 실탄 확보'},
-      {k:'c3',tx:'3~5일 후 200일선 유지 확인 → TQQQ 추가 2억'},
-      {k:'c4',tx:'2주 후 완전 안착 → TQQQ 1억 + FNGU 5천만'},
-      {k:'c5',tx:'항상 현금 2억 이상 유보 유지'},
-    ]},
-    {t:'절대 하지 말 것',items:[
-      {k:'d1',tx:'200일선 회복 전 TQQQ/FNGU/SOXL 매수'},
-      {k:'d2',tx:'"많이 빠졌으니 저점이겠지" 감에 의한 진입'},
-      {k:'d3',tx:'생활비·대출금·타인 자금 투자'},
-      {k:'d4',tx:'손실 복구 목적 레버리지 추가매수'},
-      {k:'d5',tx:'커뮤니티·SNS 추천 뇌동매매'},
-    ]},
+    {t:'利됱떆 ?ㅽ뻾 (?ㅻ뒛)',items:[{k:'a1',tx:'誘몃옒?먯뀑 or ?ㅼ? ?댁쇅二쇱떇 怨꾩쥖 媛쒖꽕 ?좎껌'},{k:'a2',tx:'?덈쾭由ъ? ETF 蹂댁쑀 ?щ? ?뺤씤 ??蹂댁쑀 ???뱀씪 留ㅻ룄'},{k:'a3',tx:'?ъ쑀?먭툑 6???щ윭 ?섏쟾 ???щ윭 MMF ?먮뒗 ?щ윭 RP 媛??},{k:'a4',tx:'GLD 2??留ㅼ닔 (?댁쇅二쇱떇 怨꾩쥖 ?명똿 ??'},{k:'a5',tx:'QQQ 1???뚮웾 留ㅼ닔 (?κ린 ?뺤떊 ?ъ???'}]},
+    {t:'?대쾲 二?紐⑤땲?곕쭅',items:[{k:'b1',tx:'TradingView ??NDX ?쇰큺 ??MA200 ?뚰뙆 ?뚮┝ ?깅줉'},{k:'b2',tx:'CNN Fear & Greed 遺곷쭏??},{k:'b3',tx:'FRED HY Spread 遺곷쭏??},{k:'b4',tx:'10?꾨Ъ 援?콈 湲덈━ 紐⑤땲?곕쭅 ??4.5% ?뚰뙆 ??二쇱쓽'}]},
+    {t:'200?쇱꽑 ?щ룎?????ㅽ뻾',items:[{k:'c1',tx:'?뚰뙆 ?뺤씤 ?뱀씪 醫낃? ??TQQQ 2???쒖옣媛 留ㅼ닔'},{k:'c2',tx:'GLD 蹂댁쑀遺??덈컲 ?듭젅 ???ㅽ깂 ?뺣낫'},{k:'c3',tx:'3~5????200?쇱꽑 ?좎? ?뺤씤 ??TQQQ 異붽? 2??},{k:'c4',tx:'2二????꾩쟾 ?덉갑 ??TQQQ 1??+ FNGU 5泥쒕쭔'},{k:'c5',tx:'??긽 ?꾧툑 2???댁긽 ?좊낫 ?좎?'}]},
+    {t:'?덈? ?섏? 留?寃?,items:[{k:'d1',tx:'200?쇱꽑 ?뚮났 ??TQQQ/FNGU/SOXL 留ㅼ닔'},{k:'d2',tx:'"留롮씠 鍮좎죱?쇰땲 ??먯씠寃좎?" 媛먯뿉 ?섑븳 吏꾩엯'},{k:'d3',tx:'?앺솢鍮꽷룸?異쒓툑쨌????먭툑 ?ъ옄'},{k:'d4',tx:'?먯떎 蹂듦뎄 紐⑹쟻 ?덈쾭由ъ? 異붽?留ㅼ닔'},{k:'d5',tx:'而ㅻ??덊떚쨌SNS 異붿쿇 ?뚮룞留ㅻℓ'}]},
   ];
-  const all=secs.flatMap(s=>s.items).length;
-  const cnt=Object.values(done).filter(Boolean).length;
-  const pct=Math.round(cnt/all*100);
+  const all=secs.flatMap(s=>s.items).length,cnt=Object.values(done).filter(Boolean).length,pct=Math.round(cnt/all*100);
   return (
     <div>
       <div className="card mg">
         <div className="fb">
-          <div><div className="ct">실행 진행률</div>
-            <div style={{fontFamily:'IBM Plex Mono',fontSize:22,fontWeight:700,color:'var(--gL)'}}>{cnt}/{all}</div>
-          </div>
-          <div style={{textAlign:'right'}}>
-            <div className="sm">완료율</div>
-            <div style={{fontFamily:'Bebas Neue',fontSize:40,color:pct>70?'var(--gr)':'var(--or)'}}>{pct}%</div>
-          </div>
+          <div><div className="ct">?ㅽ뻾 吏꾪뻾瑜?/div><div style={{fontFamily:'IBM Plex Mono',fontSize:22,fontWeight:700,color:'var(--gL)'}}>{cnt}/{all}</div></div>
+          <div style={{textAlign:'right'}}><div className="sm">?꾨즺??/div><div style={{fontFamily:'Bebas Neue',fontSize:40,color:pct>70?'var(--gr)':'var(--or)'}}>{pct}%</div></div>
         </div>
         <div className="gb" style={{height:10}}><div className="gf" style={{width:`${pct}%`,background:'linear-gradient(90deg,var(--go),var(--gr))'}}/></div>
       </div>
@@ -626,51 +413,38 @@ function T4() {
           <div className="ct">{sec.t}</div>
           {sec.items.map(it=>(
             <div key={it.k} className="ci" onClick={()=>tog(it.k)}>
-              <div className={`cb ${done[it.k]?'ck':''}`}>{done[it.k]&&<span style={{color:'#fff',fontSize:11,fontWeight:900}}>✓</span>}</div>
+              <div className={`cb ${done[it.k]?'ck':''}`}>{done[it.k]&&<span style={{color:'#fff',fontSize:11,fontWeight:900}}>??/span>}</div>
               <div className={`ctxt ${done[it.k]?'dn':''}`}>{it.tx}</div>
             </div>
           ))}
         </div>
       ))}
-      <div className="wb">본 내용은 학습 참고 자료이며 투자 권유가 아닙니다. 모든 투자 결정은 본인의 판단과 책임 하에 이루어져야 합니다.</div>
+      <div className="wb">蹂??댁슜? ?숈뒿 李멸퀬 ?먮즺?대ŉ ?ъ옄 沅뚯쑀媛 ?꾨떃?덈떎. 紐⑤뱺 ?ъ옄 寃곗젙? 蹂몄씤???먮떒怨?梨낆엫 ?섏뿉 ?대（?댁졇???⑸땲??</div>
     </div>
   );
 }
 
-// ─── App ───────────────────────────────────────────────────────
 function App() {
-  const [tab, setTab] = useState(0);
-  const [D, setD] = useState({});
-  const [fg, setFg] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState('');
-  const [hasError, setHasError] = useState(false);
+  const [tab,setTab]=useState(0);
+  const [D,setD]=useState({});
+  const [fg,setFg]=useState(null);
+  const [loading,setLoading]=useState(true);
+  const [lastUpdate,setLastUpdate]=useState('');
+  const [hasError,setHasError]=useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setHasError(false);
     try {
-      // Promise.allSettled: 하나 실패해도 나머지 계속 진행
-      const results = await Promise.allSettled([
-        fetchQuote('^GSPC'),
-        fetchQuote('^NDX'),
-        fetchQuote('TQQQ'),
-        fetchQuote('FNGU'),
-        fetchQuote('SOXL'),
-        fetchQuote('^VIX', '3mo'),
-        fetchQuote('GLD'),
-        fetchQuote('^TNX'),
-        fetchFearGreed(),
-      ]);
-      const [sp500, ndx, tqqq, fngu, soxl, vix, gold, tnx, fearGreed] =
-        results.map(r => r.status === 'fulfilled' ? r.value : null);
-
-      setD({ sp500, ndx, tqqq, fngu, soxl, vix, gold, tnx });
-      setFg(fearGreed);
-      setLastUpdate(now());
-
-      // 핵심 3개도 다 실패하면 에러 표시
-      if (!sp500 && !ndx && !tqqq) setHasError(true);
+      const data = await loadAllData();
+      setD({
+        sp500: data.sp500, ndx: data.ndx, tqqq: data.tqqq,
+        fngu: data.fngu, soxl: data.soxl, vix: data.vix,
+        gold: data.gold, tnx: data.tnx,
+      });
+      setFg(data.fg);
+      setLastUpdate(nowStr());
+      if (!data.sp500 && !data.ndx) setHasError(true);
     } catch(e) {
       console.error(e);
       setHasError(true);
@@ -681,13 +455,11 @@ function App() {
 
   useEffect(() => {
     loadData();
-    // 30분마다 자동 갱신
     const timer = setInterval(loadData, 30 * 60 * 1000);
     return () => clearInterval(timer);
   }, [loadData]);
 
-  const tabs = ['📊 시장 현황','💰 수익 시뮬레이터','🎯 바닥 신호판','✅ 실행 체크리스트'];
-
+  const tabs=['?뱤 ?쒖옣 ?꾪솴','?뮥 ?섏씡 ?쒕??덉씠??,'?렞 諛붾떏 ?좏샇??,'???ㅽ뻾 泥댄겕由ъ뒪??];
   return (
     <>
       <style>{S}</style>
@@ -695,41 +467,33 @@ function App() {
         <div className="hdr">
           <div>
             <div className="hdr-t">BangBro Dashboard</div>
-            <div className="hdr-s">뱅브로식 미국주식 투자 모니터링 시스템</div>
+            <div className="hdr-s">諭낅툕濡쒖떇 誘멸뎅二쇱떇 ?ъ옄 紐⑤땲?곕쭅 ?쒖뒪??/div>
           </div>
           <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6}}>
             {loading
-              ? <span className="err-badge">⟳ 데이터 로딩 중...</span>
+              ? <span className="err-badge">???곗씠??濡쒕뵫 以?..</span>
               : hasError
-              ? <span className="err-badge" onClick={loadData} style={{cursor:'pointer'}}>⚠️ 재시도 클릭</span>
+              ? <span className="err-badge" onClick={loadData}>?좑툘 ?ㅻ쪟 ???ъ떆???대┃</span>
               : <span className="live-badge"><span className="ldot" style={{margin:0}}/> LIVE</span>
             }
-            <div style={{fontFamily:'IBM Plex Mono',fontSize:11,color:'var(--gY)'}}>
-              {lastUpdate || '—'}
-            </div>
-            <button onClick={loadData} style={{background:'var(--nv3)',border:'1px solid var(--bd)',borderRadius:6,color:'var(--gY)',fontSize:10,padding:'3px 10px',cursor:'pointer',fontFamily:'IBM Plex Mono'}}>
-              🔄 새로고침
-            </button>
+            <div style={{fontFamily:'IBM Plex Mono',fontSize:11,color:'var(--gY)'}}>{lastUpdate||'??}</div>
+            <button onClick={loadData} style={{background:'var(--nv3)',border:'1px solid var(--bd)',borderRadius:6,color:'var(--gY)',fontSize:10,padding:'3px 10px',cursor:'pointer',fontFamily:'IBM Plex Mono'}}>?봽 ?덈줈怨좎묠</button>
           </div>
         </div>
-        <div className="tabs">
-          {tabs.map((t,i)=>(
-            <button key={i} className={`tab ${tab===i?'on':''}`} onClick={()=>setTab(i)}>{t}</button>
-          ))}
-        </div>
+        <div className="tabs">{tabs.map((t,i)=><button key={i} className={`tab ${tab===i?'on':''}`} onClick={()=>setTab(i)}>{t}</button>)}</div>
         <div className="content">
-          {loading && Object.keys(D).length === 0 ? (
+          {loading&&Object.keys(D).length===0?(
             <div className="loading">
               <div className="spin"/>
-              <div className="loading-txt">Yahoo Finance에서 실시간 데이터를 불러오는 중...</div>
-              <div style={{fontSize:11,color:'var(--gy)'}}>S&P500, NDX, TQQQ, FNGU, SOXL, VIX, Gold, TNX + 200일선 계산 중</div>
+              <div className="loading-txt">?ㅼ떆媛??곗씠??遺덈윭?ㅻ뒗 以?..</div>
+              <div style={{fontSize:11,color:'var(--gy)'}}>S&P500 쨌 NDX 쨌 TQQQ 쨌 FNGU 쨌 SOXL 쨌 VIX 쨌 Gold 쨌 TNX</div>
             </div>
-          ) : (
+          ):(
             <>
-              {tab===0 && <T1 D={D} fg={fg}/>}
-              {tab===1 && <T2 D={D}/>}
-              {tab===2 && <T3 D={D} fg={fg}/>}
-              {tab===3 && <T4/>}
+              {tab===0&&<T1 D={D} fg={fg}/>}
+              {tab===1&&<T2 D={D}/>}
+              {tab===2&&<T3 D={D} fg={fg}/>}
+              {tab===3&&<T4/>}
             </>
           )}
         </div>
@@ -737,7 +501,6 @@ function App() {
     </>
   );
 }
-
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
 </body>
