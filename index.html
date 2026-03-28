@@ -7,22 +7,110 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <style>
-    body { margin: 0; padding: 0; }
-    #root { min-height: 100vh; }
-  </style>
+  <style>body{margin:0;padding:0;} #root{min-height:100vh;}</style>
 </head>
 <body>
-  <div id="root"></div>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
 
-  <script type="text/babel">
-    const { useState } = React;
+// ─── 데이터 fetch (다중 프록시 폴백) ──────────────────────────
+const PROXIES = [
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://proxy.cors.sh/${url}`,
+];
 
+async function fetchWithFallback(targetUrl) {
+  for (const makeProxy of PROXIES) {
+    try {
+      const res = await fetch(makeProxy(targetUrl), { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) continue;
+      const text = await res.text();
+      return JSON.parse(text);
+    } catch { continue; }
+  }
+  throw new Error(`All proxies failed for: ${targetUrl}`);
+}
+
+async function fetchQuote(symbol, range = "1y", interval = "1d") {
+  try {
+    const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}&includePrePost=false`;
+    const json = await fetchWithFallback(targetUrl);
+    const result = json?.chart?.result?.[0];
+    if (!result) return null;
+
+    const closes = result.indicators?.quote?.[0]?.close ?? [];
+    const validCloses = closes.filter(v => v != null);
+    const current = validCloses[validCloses.length - 1];
+    if (!current) return null;
+
+    // 200일 이동평균 계산
+    const ma200arr = validCloses.slice(-200);
+    const ma200 = ma200arr.length > 0
+      ? ma200arr.reduce((a, b) => a + b, 0) / ma200arr.length
+      : null;
+
+    // YTD 수익률 (연초 첫 거래일 기준)
+    const timestamps = result.timestamp ?? [];
+    const currentYear = new Date().getFullYear();
+    let ytdBase = null;
+    for (let i = 0; i < timestamps.length; i++) {
+      if (new Date(timestamps[i] * 1000).getFullYear() === currentYear) {
+        ytdBase = validCloses[i];
+        break;
+      }
+    }
+    const ytd = ytdBase ? (((current - ytdBase) / ytdBase) * 100) : null;
+
+    // 52주 고가/저가
+    const meta = result.meta ?? {};
+    const high52 = meta.fiftyTwoWeekHigh ?? Math.max(...validCloses);
+    const low52  = meta.fiftyTwoWeekLow  ?? Math.min(...validCloses);
+
+    // 최근 7일 히스토리
+    const recentCloses = validCloses.slice(-7);
+    const recentTs     = timestamps.slice(-7);
+    const history = recentCloses.map((v, i) => {
+      const d = recentTs[i] ? new Date(recentTs[i] * 1000) : new Date();
+      return {
+        date: `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`,
+        val: parseFloat(v.toFixed(3))
+      };
+    });
+
+    return {
+      current: parseFloat(current.toFixed(2)),
+      ma200:   ma200 ? parseFloat(ma200.toFixed(2)) : null,
+      ytd:     ytd   ? parseFloat(ytd.toFixed(1))   : null,
+      high52:  parseFloat(high52.toFixed(2)),
+      low52:   parseFloat(low52.toFixed(2)),
+      history,
+    };
+  } catch(e) {
+    console.error(`fetchQuote error [${symbol}]:`, e.message);
+    return null;
+  }
+}
+
+// Fear & Greed — CNN + 폴백
+async function fetchFearGreed() {
+  try {
+    const json = await fetchWithFallback(
+      "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+    );
+    return Math.round(json?.fear_and_greed?.score ?? 15);
+  } catch {
+    return null;
+  }
+}
+
+// ─── CSS ───────────────────────────────────────────────────────
 const S = `
   @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
   :root{
-    --nv:#0D1B2E;--nv2:#152236;--nv3:#1E3350;--nv4:#243655;
+    --nv:#0D1B2E;--nv2:#152236;--nv3:#1E3350;
     --go:#C9943A;--gL:#F0C060;
     --re:#E53E3E;--rL:#FCA5A5;
     --gr:#22C55E;--gR:#86EFAC;
@@ -37,139 +125,108 @@ const S = `
        position:sticky;top:0;z-index:100;}
   .hdr-t{font-family:'Bebas Neue',cursive;font-size:26px;color:var(--gL);letter-spacing:3px;}
   .hdr-s{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--gY);margin-top:2px;}
-  .ldot{width:7px;height:7px;background:var(--gr);border-radius:50%;display:inline-block;
-        margin-right:5px;animation:pulse 2s infinite;}
+  .ldot{width:7px;height:7px;background:var(--gr);border-radius:50%;display:inline-block;margin-right:5px;animation:pulse 2s infinite;}
   @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
-  .tabs{display:flex;gap:3px;padding:14px 20px 0;border-bottom:1px solid var(--bd);}
+  .tabs{display:flex;gap:3px;padding:14px 20px 0;border-bottom:1px solid var(--bd);flex-wrap:wrap;}
   .tab{padding:8px 16px;border-radius:8px 8px 0 0;font-size:12px;font-weight:700;cursor:pointer;
        transition:all .2s;border:1px solid transparent;border-bottom:none;
        color:var(--gY);background:transparent;font-family:'Noto Sans KR',sans-serif;}
   .tab.on{background:var(--nv3);color:var(--gL);border-color:var(--bd);}
   .tab:hover:not(.on){color:var(--wh);background:rgba(255,255,255,.05);}
   .content{padding:20px;}
-  .card{background:var(--nv2);border:1px solid var(--bd);border-radius:12px;padding:18px;
-        transition:transform .2s,box-shadow .2s;}
+  .card{background:var(--nv2);border:1px solid var(--bd);border-radius:12px;padding:18px;transition:transform .2s,box-shadow .2s;}
   .card:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.4);}
-  .ct{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--gY);
-      letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;}
+  .ct{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--gY);letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;}
   .g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
-  .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
   .g5{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;}
-  @media(max-width:900px){.g5{grid-template-columns:1fr 1fr 1fr}.g4{grid-template-columns:1fr 1fr}.g2{grid-template-columns:1fr}}
+  @media(max-width:900px){.g5{grid-template-columns:1fr 1fr 1fr}.g2{grid-template-columns:1fr}}
   @media(max-width:600px){.g5{grid-template-columns:1fr 1fr}}
-  .bdg{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;
-       font-size:11px;font-weight:700;font-family:'IBM Plex Mono',monospace;}
+  .bdg{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;font-family:'IBM Plex Mono',monospace;}
   .br{background:rgba(229,62,62,.15);color:var(--re);border:1px solid rgba(229,62,62,.3);}
   .bg{background:rgba(34,197,94,.15);color:var(--gr);border:1px solid rgba(34,197,94,.3);}
   .by{background:rgba(234,179,8,.15);color:#EAB308;border:1px solid rgba(234,179,8,.3);}
   .bgy{background:rgba(100,116,139,.15);color:var(--gY);border:1px solid rgba(100,116,139,.3);}
   .bn{font-family:'Bebas Neue',cursive;font-size:46px;line-height:1;}
-  .bn.re{color:var(--re)} .bn.gr{color:var(--gr)} .bn.go{color:var(--gL)} .bn.or{color:var(--or)}
-  .bn.bl{color:var(--bl)}
+  .bn.re{color:var(--re)} .bn.gr{color:var(--gr)} .bn.or{color:var(--or)} .bn.bl{color:var(--bl)}
   .gb{height:7px;border-radius:4px;background:rgba(255,255,255,.1);overflow:hidden;margin:6px 0;}
-  .gf{height:100%;border-radius:4px;transition:width .6s;}
-  .sr{display:flex;align-items:center;justify-content:space-between;
-      padding:8px 0;border-bottom:1px solid var(--bd);}
+  .gf{height:100%;border-radius:4px;transition:width .8s;}
+  .sr{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bd);}
   .sr:last-child{border-bottom:none;}
   .sl{font-size:12px;color:var(--gY);}
   .sv{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;}
   .sw{margin:14px 0;}
   .sw label{font-size:11px;color:var(--gY);display:flex;justify-content:space-between;margin-bottom:5px;}
   input[type=range]{width:100%;accent-color:var(--go);cursor:pointer;}
-  .rb{background:linear-gradient(135deg,var(--nv3),rgba(201,148,58,.1));
-      border:1px solid rgba(201,148,58,.3);border-radius:10px;padding:16px;margin-top:14px;}
-  .rr{display:flex;justify-content:space-between;align-items:center;
-      padding:7px 0;border-bottom:1px solid var(--bd);}
+  .rb{background:linear-gradient(135deg,var(--nv3),rgba(201,148,58,.1));border:1px solid rgba(201,148,58,.3);border-radius:10px;padding:16px;margin-top:14px;}
+  .rr{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--bd);}
   .rr:last-child{border-bottom:none;}
   .rl{font-size:12px;color:var(--gY);}
   .rv{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;color:var(--gL);}
-  .tl{position:relative;padding-left:22px;}
-  .tl::before{content:'';position:absolute;left:7px;top:0;bottom:0;width:2px;background:var(--bd);}
-  .ti{position:relative;margin-bottom:18px;}
-  .tdot{position:absolute;left:-18px;top:4px;width:11px;height:11px;border-radius:50%;border:2px solid;}
-  .ti.dn .tdot{background:var(--gr);border-color:var(--gr);}
-  .ti.nw .tdot{background:var(--or);border-color:var(--or);animation:pulse 1.5s infinite;}
-  .ti.ft .tdot{background:transparent;border-color:var(--gy);}
-  .tt{font-size:12px;font-weight:700;margin-bottom:3px;}
-  .td2{font-size:11px;color:var(--gY);line-height:1.5;}
-  .ci{display:flex;align-items:flex-start;gap:9px;padding:9px 0;
-      border-bottom:1px solid var(--bd);cursor:pointer;}
+  .ci{display:flex;align-items:flex-start;gap:9px;padding:9px 0;border-bottom:1px solid var(--bd);cursor:pointer;}
   .ci:last-child{border-bottom:none;}
-  .cb{width:19px;height:19px;border-radius:4px;border:2px solid var(--bd);
-      display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;margin-top:1px;}
+  .cb{width:19px;height:19px;border-radius:4px;border:2px solid var(--bd);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;margin-top:1px;}
   .cb.ck{background:var(--gr);border-color:var(--gr);}
   .ctxt{font-size:12px;line-height:1.5;}
   .ctxt.dn{color:var(--gY);text-decoration:line-through;}
-  .wb{background:rgba(229,62,62,.1);border:1px solid rgba(229,62,62,.3);
-      border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.6;color:#FCA5A5;}
-  .gb2{background:rgba(201,148,58,.1);border:1px solid rgba(201,148,58,.3);
-       border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.6;color:var(--gL);}
-  .ib{background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);
-      border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.6;color:#93C5FD;}
+  .wb{background:rgba(229,62,62,.1);border:1px solid rgba(229,62,62,.3);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.6;color:#FCA5A5;}
+  .gb2{background:rgba(201,148,58,.1);border:1px solid rgba(201,148,58,.3);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.6;color:var(--gL);}
+  .ib{background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.6;color:#93C5FD;}
   .mg{margin-bottom:16px;}
   .fb{display:flex;justify-content:space-between;align-items:center;}
   .sm{font-size:11px;color:var(--gY);}
+  /* 로딩 */
+  .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:16px;}
+  .spin{width:48px;height:48px;border:4px solid var(--bd);border-top-color:var(--gL);border-radius:50%;animation:spin 1s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .loading-txt{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--gY);}
+  /* 게이지 */
   .yield-card{background:var(--nv2);border-radius:12px;padding:18px;border:1px solid var(--bd);transition:transform .2s,box-shadow .2s;}
   .yield-card:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.4);}
   .yield-gauge-wrap{position:relative;margin:16px 0 10px;height:56px;}
-  .yield-track{position:absolute;bottom:0;left:0;right:0;height:14px;border-radius:7px;background:linear-gradient(90deg,#22C55E 0%,#22C55E 47%,#EAB308 47%,#EAB308 52%,#EF4444 52%,#EF4444 100%);opacity:.35;}
+  .yield-track{position:absolute;bottom:0;left:0;right:0;height:14px;border-radius:7px;
+    background:linear-gradient(90deg,#22C55E 0%,#22C55E 47%,#EAB308 47%,#EAB308 52%,#EF4444 52%,#EF4444 100%);opacity:.35;}
   .yield-fill{position:absolute;bottom:0;left:0;height:14px;border-radius:7px;transition:width .8s cubic-bezier(.4,0,.2,1);}
   .yield-line{position:absolute;bottom:-4px;width:2px;height:22px;background:rgba(255,255,255,.9);border-radius:1px;transform:translateX(-50%);}
   .yield-line-label{position:absolute;top:-22px;transform:translateX(-50%);font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(255,255,255,.7);white-space:nowrap;}
   .yield-pin{position:absolute;bottom:10px;width:3px;height:28px;border-radius:2px;transform:translateX(-50%);transition:left .8s cubic-bezier(.4,0,.2,1);box-shadow:0 0 8px rgba(255,255,255,.6);}
-  .yield-pin-label{position:absolute;top:-32px;transform:translateX(-50%);font-family:'Bebas Neue',cursive;font-size:18px;white-space:nowrap;transition:left .8s cubic-bezier(.4,0,.2,1);}
+  .yield-pin-label{position:absolute;top:-32px;transform:translateX(-50%);font-family:'Bebas Neue',cursive;font-size:18px;white-space:nowrap;}
   .yield-ticks{position:absolute;bottom:18px;left:0;right:0;display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--gY);}
-  .yield-status{border-radius:8px;padding:10px 14px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:8px;margin-top:10px;border:1px solid;transition:all .4s;}
-  .yield-history{margin-top:12px;}
+  .yield-status{border-radius:8px;padding:10px 14px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:8px;margin-top:10px;border:1px solid;}
   .yh-row{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--bd);}
   .yh-row:last-child{border-bottom:none;}
   .yh-date{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--gY);min-width:52px;}
   .yh-bar-wrap{flex:1;height:6px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden;}
-  .yh-bar{height:100%;border-radius:3px;transition:width .5s;}
+  .yh-bar{height:100%;border-radius:3px;}
   .yh-val{font-family:'IBM Plex Mono',monospace;font-size:10px;min-width:36px;text-align:right;}
+  /* 실시간 뱃지 */
+  .live-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:20px;padding:3px 10px;font-size:10px;color:var(--gr);font-family:'IBM Plex Mono',monospace;}
+  .err-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.3);border-radius:20px;padding:3px 10px;font-size:10px;color:var(--or);font-family:'IBM Plex Mono',monospace;}
 `;
 
-// ── 데이터 ────────────────────────────────────────────────────
-const D = {
-  sp500:{v:6600,ma:6621}, ndx:{v:24260,ma:24347},
-  tqqq:{v:44.88,ytd:-18.3,h:60.69,l:17.50},
-  fngu:{v:19.89,ytd:-22.1}, soxl:{v:18.50,ytd:-30.2},
-  fg:15, vix:24.98, gold:4347,
-  tnx: {
-    current: 4.392,
-    threshold: 4.5,
-    history: [
-      {date:'03/17',val:4.31},
-      {date:'03/18',val:4.35},
-      {date:'03/19',val:4.42},
-      {date:'03/20',val:4.39},
-      {date:'03/21',val:4.34},
-      {date:'03/24',val:4.392},
-    ]
-  }
+const fmtW = n => n>=1e8?`${(n/1e8).toFixed(1)}억`:n>=1e4?`${(n/1e4).toFixed(0)}만`:`${n}`;
+const fmt2 = n => n != null ? n.toLocaleString(undefined, {minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
+const now = () => {
+  const d = new Date();
+  return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 };
 
-const fmtW = n => n>=1e8?`${(n/1e8).toFixed(1)}억`:n>=1e4?`${(n/1e4).toFixed(0)}만`:`${n}`;
-
-function YieldGauge({compact=false}) {
-  const {current, threshold, history} = D.tnx;
+// ─── YieldGauge ────────────────────────────────────────────────
+function YieldGauge({ tnx }) {
+  if (!tnx) return null;
+  const current = tnx.current, threshold = 4.5;
   const MIN = 3.5, MAX = 5.5;
   const isRisk = current >= threshold;
-  const pct = ((current - MIN) / (MAX - MIN) * 100).toFixed(1);
+  const pct = Math.min(100, Math.max(0, ((current - MIN) / (MAX - MIN) * 100))).toFixed(1);
   const threshPct = ((threshold - MIN) / (MAX - MIN) * 100).toFixed(1);
   const pinColor = isRisk ? '#EF4444' : '#22C55E';
-  const fillGrad = isRisk
-    ? 'linear-gradient(90deg,#22C55E,#EAB308 40%,#EF4444)'
-    : 'linear-gradient(90deg,#22C55E,#4ADE80)';
-  const maxH = Math.max(...history.map(h=>h.val));
+  const fillGrad = isRisk ? 'linear-gradient(90deg,#22C55E,#EAB308 40%,#EF4444)' : 'linear-gradient(90deg,#22C55E,#4ADE80)';
+  const maxH = tnx.history ? Math.max(...tnx.history.map(h=>h.val)) : current;
   return (
     <div className="yield-card">
-      <div className="ct">미국 10년물 국채 금리 (US10Y)</div>
+      <div className="ct">미국 10년물 국채 금리 (US10Y) — 실시간</div>
       <div className="fb" style={{marginBottom:4}}>
         <div>
-          <div className={`bn ${isRisk?'re':'gr'}`} style={{fontSize:compact?36:46}}>
-            {current.toFixed(3)}%
-          </div>
+          <div className={`bn ${isRisk?'re':'gr'}`} style={{fontSize:46}}>{current.toFixed(3)}%</div>
           <div className="sm" style={{marginTop:3}}>
             기준선 {threshold}% 대비&nbsp;
             <span style={{color:isRisk?'var(--re)':'var(--gr)',fontWeight:700}}>
@@ -177,55 +234,44 @@ function YieldGauge({compact=false}) {
             </span>
           </div>
         </div>
-        <div style={{textAlign:'right'}}>
-          <span className={`bdg ${isRisk?'br':'bg'}`} style={{fontSize:12,padding:'5px 14px'}}>
-            {isRisk ? '⚠️ 위험 구간' : '✅ 안정 구간'}
-          </span>
-          <div className="sm" style={{marginTop:5}}>기준선 {threshold}%</div>
-        </div>
+        <span className={`bdg ${isRisk?'br':'bg'}`} style={{fontSize:12,padding:'5px 14px'}}>
+          {isRisk ? '⚠️ 위험 구간' : '✅ 안정 구간'}
+        </span>
       </div>
       <div className="yield-gauge-wrap">
         <div className="yield-ticks">
-          {['3.5','3.8','4.0','4.2','4.4','4.5','4.7','5.0','5.2','5.5'].map((t,i)=>(
-            <span key={i}>{t}</span>
-          ))}
+          {['3.5','3.8','4.0','4.2','4.4','4.5','4.7','5.0','5.2','5.5'].map((t,i)=><span key={i}>{t}</span>)}
         </div>
         <div className="yield-track"/>
         <div className="yield-fill" style={{width:`${pct}%`,background:fillGrad}}/>
         <div className="yield-line" style={{left:`${threshPct}%`}}>
           <div className="yield-line-label" style={{left:'50%'}}>4.5%</div>
         </div>
-        <div className="yield-pin" style={{left:`${pct}%`, background:pinColor}}/>
-        <div className="yield-pin-label" style={{left:`${pct}%`, color:pinColor}}>
-          {current.toFixed(3)}%
-        </div>
+        <div className="yield-pin" style={{left:`${pct}%`,background:pinColor}}/>
+        <div className="yield-pin-label" style={{left:`${pct}%`,color:pinColor}}>{current.toFixed(3)}%</div>
       </div>
       <div className="yield-status" style={{
-        background: isRisk ? 'rgba(239,68,68,.1)' : 'rgba(34,197,94,.1)',
-        borderColor: isRisk ? 'rgba(239,68,68,.35)' : 'rgba(34,197,94,.35)',
-        color: isRisk ? '#FCA5A5' : '#86EFAC'
+        background:isRisk?'rgba(239,68,68,.1)':'rgba(34,197,94,.1)',
+        borderColor:isRisk?'rgba(239,68,68,.35)':'rgba(34,197,94,.35)',
+        color:isRisk?'#FCA5A5':'#86EFAC'
       }}>
-        <span style={{fontSize:16}}>{isRisk ? '🔴' : '🟢'}</span>
-        <div>
-          {isRisk
-            ? `현재 ${current.toFixed(3)}% — 4.5% 초과. 주식시장 밸류에이션 압박, 성장주 하락 압력 증가.`
-            : `현재 ${current.toFixed(3)}% — 4.5% 미만. 상대적 안정 구간. 주식시장 부담 낮음.`
-          }
-        </div>
+        <span style={{fontSize:16}}>{isRisk?'🔴':'🟢'}</span>
+        <div>{isRisk
+          ? `현재 ${current.toFixed(3)}% — 4.5% 초과. 성장주 하락 압력 증가.`
+          : `현재 ${current.toFixed(3)}% — 4.5% 미만. 상대적 안정 구간.`
+        }</div>
       </div>
-      {!compact && (
-        <div className="yield-history">
+      {tnx.history && (
+        <div style={{marginTop:12}}>
           <div style={{fontSize:10,color:'var(--gY)',marginBottom:6,fontFamily:'IBM Plex Mono',letterSpacing:1}}>최근 추이</div>
-          {history.map((h,i)=>{
+          {tnx.history.map((h,i)=>{
             const hPct = (h.val/maxH*100).toFixed(0);
             const hRisk = h.val >= threshold;
             return (
               <div className="yh-row" key={i}>
                 <span className="yh-date">{h.date}</span>
-                <div className="yh-bar-wrap">
-                  <div className="yh-bar" style={{width:`${hPct}%`,background: hRisk ? 'var(--re)' : 'var(--gr)'}}/>
-                </div>
-                <span className="yh-val" style={{color: hRisk?'var(--re)':'var(--gr)'}}>{h.val}%</span>
+                <div className="yh-bar-wrap"><div className="yh-bar" style={{width:`${hPct}%`,background:hRisk?'var(--re)':'var(--gr)'}}/></div>
+                <span className="yh-val" style={{color:hRisk?'var(--re)':'var(--gr)'}}>{h.val}%</span>
               </div>
             );
           })}
@@ -233,8 +279,8 @@ function YieldGauge({compact=false}) {
       )}
       <div style={{marginTop:12,display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
         {[
-          {label:'4.5% 이상 (위험)', desc:'성장주·레버리지 부담↑\n채권 매력도 증가', c:'var(--re)', bg:'rgba(239,68,68,.08)'},
-          {label:'4.5% 미만 (안정)', desc:'주식 밸류에이션 지지\n레버리지 진입 환경 개선', c:'var(--gr)', bg:'rgba(34,197,94,.08)'},
+          {label:'4.5% 이상 (위험)',desc:'성장주·레버리지 부담↑\n채권 매력도 증가',c:'var(--re)',bg:'rgba(239,68,68,.08)'},
+          {label:'4.5% 미만 (안정)',desc:'주식 밸류에이션 지지\n레버리지 진입 환경 개선',c:'var(--gr)',bg:'rgba(34,197,94,.08)'},
         ].map((b,i)=>(
           <div key={i} style={{background:b.bg,borderRadius:8,padding:'9px 11px',border:`1px solid ${b.c}33`}}>
             <div style={{fontSize:10,fontWeight:700,color:b.c,marginBottom:3}}>{b.label}</div>
@@ -246,61 +292,65 @@ function YieldGauge({compact=false}) {
   );
 }
 
-function T1() {
+// ─── T1: 시장현황 ──────────────────────────────────────────────
+function T1({ D, fg }) {
+  const tnxOk = D.tnx?.current < 4.5;
   const sigs = [
-    {l:"S&P 500 vs 200일선",  v:`${D.sp500.v.toLocaleString()} / ${D.sp500.ma.toLocaleString()}`, s:'RED'},
-    {l:"나스닥100 vs 200일선", v:`${D.ndx.v.toLocaleString()} / ${D.ndx.ma.toLocaleString()}`,   s:'RED'},
-    {l:"Fear & Greed",        v:`${D.fg} — 극단적 공포`,   s:'YELLOW'},
-    {l:"10년물 국채 금리",     v:`${D.tnx.current}%`,       s: D.tnx.current >= D.tnx.threshold ? 'RED' : 'GREEN'},
-    {l:"VIX 변동성",          v:`${D.vix}`,                s:'RED'},
-    {l:"이란 유예 만료",       v:"3/28(금) 만료",            s:'RED'},
+    {l:"S&P500 vs 200일선", v:`${fmt2(D.sp500?.current)} / ${fmt2(D.sp500?.ma200)}`, s: D.sp500?.current > D.sp500?.ma200 ? 'GREEN' : 'RED'},
+    {l:"NDX vs 200일선",    v:`${fmt2(D.ndx?.current)} / ${fmt2(D.ndx?.ma200)}`,     s: D.ndx?.current > D.ndx?.ma200   ? 'GREEN' : 'RED'},
+    {l:"Fear & Greed",      v:`${fg ?? '—'} ${fg < 20 ? '— 극단적 공포' : fg < 40 ? '— 공포' : fg < 60 ? '— 중립' : '— 탐욕'}`, s: fg != null && fg < 20 ? 'YELLOW' : 'RED'},
+    {l:"10년물 국채 금리",  v:`${D.tnx?.current?.toFixed(3) ?? '—'}%`,               s: tnxOk ? 'GREEN' : 'RED'},
+    {l:"VIX 변동성",        v:`${fmt2(D.vix?.current)}`,                              s: D.vix?.current < 20 ? 'GREEN' : 'RED'},
+    {l:"Gold 안전자산",     v:`$${fmt2(D.gold?.current)}`,                            s: 'YELLOW'},
   ];
   const ok = sigs.filter(s=>s.s==='GREEN').length;
   const score = Math.round(ok/sigs.length*100);
   const sc = s => s==='GREEN'?'var(--gr)':s==='YELLOW'?'#EAB308':'var(--re)';
   const bc = s => s==='GREEN'?'bg':s==='YELLOW'?'by':'br';
+  const ndxBelow = D.ndx?.current < D.ndx?.ma200;
+
   return (
     <div>
       <div className="g5 mg">
         <div className="card">
           <div className="ct">진입 신호</div>
-          <div className="bn re">{score}%</div>
+          <div className={`bn ${score>50?'gr':'re'}`}>{score}%</div>
           <div className="sm" style={{marginTop:6}}>{ok}/{sigs.length} 충족</div>
-          <div className="gb"><div className="gf" style={{width:`${score}%`,background:'var(--re)'}}/></div>
-          <span className="bdg br">현금 보유 구간</span>
+          <div className="gb"><div className="gf" style={{width:`${score}%`,background:score>50?'var(--gr)':'var(--re)'}}/></div>
+          <span className={`bdg ${score>50?'bg':'br'}`}>{score>50?'진입 검토':'현금 보유'}</span>
         </div>
         <div className="card">
           <div className="ct">Fear & Greed</div>
-          <div className="bn or">{D.fg}</div>
-          <div className="sm" style={{marginTop:6}}>극단적 공포</div>
-          <div className="gb"><div className="gf" style={{width:`${D.fg}%`,background:'linear-gradient(90deg,var(--gr),var(--or),var(--re))'}}/></div>
+          <div className="bn or">{fg ?? '—'}</div>
+          <div className="sm" style={{marginTop:6}}>{fg < 20 ? '극단적 공포' : fg < 40 ? '공포' : fg < 60 ? '중립' : '탐욕'}</div>
+          <div className="gb"><div className="gf" style={{width:`${fg ?? 0}%`,background:'linear-gradient(90deg,var(--gr),var(--or),var(--re))'}}/></div>
           <div className="sm">한 자릿수 = 역대급 기회</div>
         </div>
         <div className="card">
-          <div className="ct">나스닥 200일선</div>
-          <div className="bn re">{D.ndx.v.toLocaleString()}</div>
-          <div className="sm" style={{marginTop:6}}>200MA: {D.ndx.ma.toLocaleString()}</div>
-          <div className="gb"><div className="gf" style={{width:`${(D.ndx.v/D.ndx.ma*100).toFixed(0)}%`,background:'var(--re)'}}/></div>
-          <span className="bdg br">200일선 하회</span>
+          <div className="ct">NDX 200일선</div>
+          <div className={`bn ${ndxBelow?'re':'gr'}`}>{D.ndx?.current?.toLocaleString() ?? '—'}</div>
+          <div className="sm" style={{marginTop:6}}>200MA: {D.ndx?.ma200?.toLocaleString() ?? '—'}</div>
+          <div className="gb"><div className="gf" style={{width:`${D.ndx?.current && D.ndx?.ma200 ? Math.min(100,(D.ndx.current/D.ndx.ma200*100).toFixed(0)) : 0}%`,background:ndxBelow?'var(--re)':'var(--gr)'}}/></div>
+          <span className={`bdg ${ndxBelow?'br':'bg'}`}>{ndxBelow?'200일선 하회':'200일선 상회'}</span>
         </div>
-        <div className="card" style={{border: D.tnx.current >= D.tnx.threshold ? '1px solid rgba(239,68,68,.4)' : '1px solid rgba(34,197,94,.4)'}}>
-          <div className="ct">US 10년물 금리</div>
-          <div className={`bn ${D.tnx.current>=D.tnx.threshold?'re':'gr'}`}>{D.tnx.current}%</div>
-          <div className="sm" style={{marginTop:6}}>기준선 {D.tnx.threshold}%</div>
-          <div className="gb" style={{background:'rgba(255,255,255,.07)'}}>
-            <div className="gf" style={{width:`${((D.tnx.current-3.5)/(5.5-3.5)*100).toFixed(0)}%`,background: D.tnx.current>=D.tnx.threshold ? 'linear-gradient(90deg,#22C55E,#EF4444)' : '#22C55E'}}/>
-          </div>
-          <span className={`bdg ${D.tnx.current>=D.tnx.threshold?'br':'bg'}`}>{D.tnx.current>=D.tnx.threshold?'위험':'안정'}</span>
+        <div className="card" style={{border: tnxOk ? '1px solid rgba(34,197,94,.4)' : '1px solid rgba(239,68,68,.4)'}}>
+          <div className="ct">US 10Y Yield</div>
+          <div className={`bn ${tnxOk?'gr':'re'}`}>{D.tnx?.current?.toFixed(3) ?? '—'}%</div>
+          <div className="sm" style={{marginTop:6}}>기준선 4.5%</div>
+          <div className="gb"><div className="gf" style={{width:`${D.tnx?.current ? ((D.tnx.current-3.5)/(5.5-3.5)*100).toFixed(0) : 0}%`,background:tnxOk?'#22C55E':'linear-gradient(90deg,#22C55E,#EF4444)'}}/></div>
+          <span className={`bdg ${tnxOk?'bg':'br'}`}>{tnxOk?'안정':'위험'}</span>
         </div>
         <div className="card">
           <div className="ct">VIX</div>
-          <div className="bn or">{D.vix}</div>
-          <div className="sm" style={{marginTop:6}}>고변동성 구간</div>
-          <div className="gb"><div className="gf" style={{width:`${Math.min(100,D.vix*2)}%`,background:'var(--or)'}}/></div>
-          <div className="sm">20 이하 시 안정 신호</div>
+          <div className={`bn ${D.vix?.current < 20 ? 'gr' : 'or'}`}>{fmt2(D.vix?.current)}</div>
+          <div className="sm" style={{marginTop:6}}>{D.vix?.current < 20 ? '안정' : '고변동성'}</div>
+          <div className="gb"><div className="gf" style={{width:`${Math.min(100,(D.vix?.current??0)*2)}%`,background:'var(--or)'}}/></div>
+          <div className="sm">20 이하 = 안정 신호</div>
         </div>
       </div>
-      <div className="mg"><YieldGauge/></div>
+
+      <div className="mg"><YieldGauge tnx={D.tnx}/></div>
+
       <div className="g2">
         <div className="card">
           <div className="ct">신호 체크판</div>
@@ -318,9 +368,9 @@ function T1() {
           <div className="card mg">
             <div className="ct">레버리지 ETF 현황</div>
             {[
-              {n:'TQQQ',p:D.tqqq.v,y:D.tqqq.ytd,h:D.tqqq.h,l:D.tqqq.l,d:'나스닥100 3배'},
-              {n:'FNGU',p:D.fngu.v,y:D.fngu.ytd,d:'FANG+ 3배'},
-              {n:'SOXL',p:D.soxl.v,y:D.soxl.ytd,d:'반도체 3배'},
+              {n:'TQQQ',d:'나스닥100 3배',data:D.tqqq},
+              {n:'FNGU',d:'FANG+ 3배',   data:D.fngu},
+              {n:'SOXL',d:'반도체 3배',   data:D.soxl},
             ].map((e,i)=>(
               <div key={i} style={{padding:'8px 0',borderBottom:i<2?'1px solid var(--bd)':'none'}}>
                 <div className="fb">
@@ -329,24 +379,28 @@ function T1() {
                     <span className="sm" style={{marginLeft:7}}>{e.d}</span>
                   </div>
                   <div style={{textAlign:'right'}}>
-                    <div style={{fontFamily:'IBM Plex Mono',fontSize:15,fontWeight:700}}>${e.p}</div>
-                    <div style={{fontSize:10,color:'var(--re)'}}>{e.y}% YTD</div>
+                    <div style={{fontFamily:'IBM Plex Mono',fontSize:15,fontWeight:700}}>${fmt2(e.data?.current)}</div>
+                    <div style={{fontSize:10,color:e.data?.ytd>=0?'var(--gr)':'var(--re)'}}>{e.data?.ytd!=null?(e.data.ytd>0?'+':'')+e.data.ytd+'% YTD':'—'}</div>
                   </div>
                 </div>
-                {e.h && <div className="gb" style={{marginTop:4}}><div className="gf" style={{width:`${((e.p-e.l)/(e.h-e.l)*100).toFixed(0)}%`,background:'var(--bl)'}}/></div>}
+                {e.data?.high52 && e.data?.low52 && (
+                  <div className="gb" style={{marginTop:4}}>
+                    <div className="gf" style={{width:`${(((e.data.current-e.data.low52)/(e.data.high52-e.data.low52))*100).toFixed(0)}%`,background:'var(--bl)'}}/>
+                  </div>
+                )}
               </div>
             ))}
-            <div className="wb" style={{marginTop:10,fontSize:11}}>🔴 200일선 하위 — 레버리지 ETF 보유 금지</div>
+            {ndxBelow && <div className="wb" style={{marginTop:10,fontSize:11}}>🔴 200일선 하위 — 레버리지 ETF 보유 금지</div>}
           </div>
           <div className="card">
             <div className="ct">뱅브로 원칙 — 지금 배분</div>
             <div className="gb2" style={{fontSize:11}}>200일선 아래 = 현금이 무기. 기다리는 것이 가장 용감한 행동.</div>
             {[
-              {a:'달러 예금/MMF',    r:'60%', amt:'6억',    ok:true},
-              {a:'GLD 금 ETF',      r:'20%', amt:'2억',    ok:true},
-              {a:'QQQ 소량',        r:'10%', amt:'1억',    ok:true},
-              {a:'원화 현금',       r:'10%', amt:'1억',    ok:true},
-              {a:'TQQQ/FNGU/SOXL', r:'0%',  amt:'절대 금지', ok:false},
+              {a:'달러 예금/MMF',    r:'60%',amt:'6억',   ok:true},
+              {a:'GLD 금 ETF',      r:'20%',amt:'2억',   ok:true},
+              {a:'QQQ 소량',        r:'10%',amt:'1억',   ok:true},
+              {a:'원화 현금',       r:'10%',amt:'1억',   ok:true},
+              {a:'TQQQ/FNGU/SOXL', r:'0%', amt:'절대 금지',ok:false},
             ].map((r,i)=>(
               <div className="sr" key={i}>
                 <span className="sl">{r.a}</span>
@@ -363,7 +417,8 @@ function T1() {
   );
 }
 
-function T2() {
+// ─── T2: 시뮬레이터 ────────────────────────────────────────────
+function T2({ D }) {
   const [cap,setCap]=useState(1000000000);
   const [tpct,setTpct]=useState(50);
   const [fpct,setFpct]=useState(15);
@@ -384,11 +439,11 @@ function T2() {
         <div className="card">
           <div className="ct">포트폴리오 설정</div>
           {[
-            {l:"투자 원금",      v:fmtW(cap),                          min:1e8,  max:5e9, step:1e8, val:cap,  set:setCap},
-            {l:"TQQQ 비중",     v:`${tpct}% (${fmtW(cap*tpct/100)})`, min:0,    max:80,  step:5,   val:tpct, set:setTpct},
-            {l:"FNGU 비중",     v:`${fpct}% (${fmtW(cap*fpct/100)})`, min:0,    max:40,  step:5,   val:fpct, set:setFpct},
-            {l:"나스닥 수익률", v:`+${ndxR}%`,                         min:-50,  max:300, step:10,  val:ndxR, set:setNdxR},
-            {l:"투자 기간",     v:`${yrs}년`,                          min:1,    max:10,  step:1,   val:yrs,  set:setYrs},
+            {l:"투자 원금",      v:fmtW(cap),                          min:1e8, max:5e9,step:1e8,val:cap, set:setCap},
+            {l:"TQQQ 비중",     v:`${tpct}% (${fmtW(cap*tpct/100)})`, min:0,   max:80, step:5,  val:tpct,set:setTpct},
+            {l:"FNGU 비중",     v:`${fpct}% (${fmtW(cap*fpct/100)})`, min:0,   max:40, step:5,  val:fpct,set:setFpct},
+            {l:"나스닥 수익률", v:`+${ndxR}%`,                         min:-50, max:300,step:10, val:ndxR,set:setNdxR},
+            {l:"투자 기간",     v:`${yrs}년`,                          min:1,   max:10, step:1,  val:yrs, set:setYrs},
           ].map((s,i)=>(
             <div className="sw" key={i}>
               <label><span>{s.l}</span><span style={{color:'var(--gL)',fontFamily:'IBM Plex Mono'}}>{s.v}</span></label>
@@ -399,6 +454,12 @@ function T2() {
             <span style={{fontFamily:'IBM Plex Mono',fontSize:12,color:'var(--gL)'}}>{qpct}% ({fmtW(cap*qpct/100)})</span>
           </div>
           <div className="ib" style={{marginTop:12,fontSize:11}}>TQQQ ≈ 나스닥×2.7배 / FNGU ≈ 나스닥×3.2배 (음의복리 감안)</div>
+          {D.tqqq?.current && (
+            <div style={{marginTop:8,background:'var(--nv3)',borderRadius:8,padding:'8px 12px',fontSize:11,color:'var(--gY)'}}>
+              실시간 — TQQQ: <span style={{color:'var(--gL)',fontFamily:'IBM Plex Mono'}}>${fmt2(D.tqqq.current)}</span>&nbsp;
+              FNGU: <span style={{color:'var(--gL)',fontFamily:'IBM Plex Mono'}}>${fmt2(D.fngu?.current)}</span>
+            </div>
+          )}
         </div>
         <div>
           <div className="card mg">
@@ -425,7 +486,7 @@ function T2() {
                 <div style={{fontFamily:'IBM Plex Mono',fontSize:26,fontWeight:700,color:'var(--re)'}}>{bR}%</div>
               </div>
             </div>
-            <div className="wb" style={{fontSize:11}}>TQQQ -55% / FNGU -65% / QQQ -20% 기준 — 이것이 200일선 하위 레버리지 보유의 리스크.</div>
+            <div className="wb" style={{fontSize:11}}>TQQQ -55% / FNGU -65% / QQQ -20% 기준</div>
           </div>
         </div>
       </div>
@@ -436,7 +497,7 @@ function T2() {
             {ev:'2020.3 코로나',buy:'$8',  ret:'+1,038%',c:'var(--gr)'},
             {ev:'2022.10 금리', buy:'$15', ret:'+287%',  c:'var(--gr)'},
             {ev:'2025.4 관세',  buy:'$17', ret:'+253%',  c:'var(--gr)'},
-            {ev:'현재 이란전쟁',buy:'$44.88',ret:'대기 중',c:'var(--or)'},
+            {ev:'현재',buy:`$${fmt2(D.tqqq?.current)}`,ret:'대기 중',c:'var(--or)'},
           ].map((h,i)=>(
             <div key={i} style={{background:'var(--nv3)',borderRadius:9,padding:12,textAlign:'center',border:'1px solid var(--bd)'}}>
               <div style={{fontSize:10,color:'var(--gY)',marginBottom:5}}>{h.ev}</div>
@@ -450,16 +511,18 @@ function T2() {
   );
 }
 
-function T3() {
+// ─── T3: 바닥 신호판 ───────────────────────────────────────────
+function T3({ D, fg }) {
   const [chk,setChk]=useState({});
   const tog=k=>setChk(p=>({...p,[k]:!p[k]}));
+  const tnxCur = D.tnx?.current ?? 4.5;
   const sigs=[
-    {k:'s1',lbl:'Fear & Greed 한 자릿수(0~9) 진입',   desc:'현재 15 — 극단 공포. 한 자릿수면 역대급 기회',       cur:'현재 15 (미충족)',       g:75,c:'var(--or)'},
-    {k:'s2',lbl:'HY Spread 5 이상에서 주간 꺾임',      desc:'현재 상승 중. 꺾이는 순간이 공포 극점 통과 신호',   cur:'상승 중 (미충족)',        g:40,c:'var(--re)'},
-    {k:'s3',lbl:'NDX 200일선 재돌파 2일 연속 ★핵심★', desc:'일봉 종가 24,350 위에서 2일 연속. 없으면 진입 금지', cur:'24,260 하회 (미충족)',     g:99,c:'var(--re)'},
-    {k:'s4',lbl:'이란 협상 타결 or 호르무즈 재개',      desc:'근본 원인 해소. 3/28 유예 만료가 이번 주 최대 변수',cur:'협상 진행 중 (미충족)',    g:30,c:'var(--bl)'},
-    {k:'s5',lbl:'VIX 20 이하 하락',                    desc:'현재 24.98. 200일선 회복과 함께 자연히 내려옴',      cur:'24.98 (미충족)',          g:55,c:'var(--bl)'},
-    {k:'s6',lbl:'10년물 국채 금리 4.5% 이하 안정',     desc:`현재 ${D.tnx.current}%. 4.5% 넘으면 성장주 밸류 압박`, cur:`${D.tnx.current}% — 4.5% 근접`, g:Math.round((D.tnx.current-3.5)/(5.5-3.5)*100), c:D.tnx.current>=D.tnx.threshold?'var(--re)':'var(--gr)'},
+    {k:'s1',lbl:'Fear & Greed 한 자릿수(0~9) 진입',   desc:`현재 ${fg ?? '—'} — 극단 공포. 한 자릿수면 역대급 기회`,      cur:`현재 ${fg ?? '—'} (${fg < 10 ? '충족!' : '미충족'})`,  g:fg ?? 15,c:'var(--or)'},
+    {k:'s2',lbl:'HY Spread 5 이상에서 주간 꺾임',      desc:'꺾이는 순간이 공포 극점 통과 신호',                             cur:'수동 확인 필요',                                         g:40,c:'var(--re)'},
+    {k:'s3',lbl:'NDX 200일선 재돌파 2일 연속 ★핵심★', desc:`종가 ${D.ndx?.ma200?.toFixed(0) ?? '—'} 위에서 2일 연속`,      cur:`${D.ndx?.current?.toLocaleString() ?? '—'} (${D.ndx?.current > D.ndx?.ma200 ? '충족!' : '미충족'})`, g:D.ndx?.current && D.ndx?.ma200 ? Math.min(99,(D.ndx.current/D.ndx.ma200*100).toFixed(0)) : 99,c:'var(--re)'},
+    {k:'s4',lbl:'이란 협상 타결 or 호르무즈 재개',      desc:'근본 원인 해소 — 뉴스 직접 확인',                               cur:'수동 확인 필요',                                         g:30,c:'var(--bl)'},
+    {k:'s5',lbl:'VIX 20 이하 하락',                    desc:`현재 VIX ${fmt2(D.vix?.current)}`,                             cur:`${fmt2(D.vix?.current)} (${D.vix?.current < 20 ? '충족!' : '미충족'})`, g:Math.min(100,D.vix?.current*2 ?? 50),c:'var(--bl)'},
+    {k:'s6',lbl:'10년물 국채 금리 4.5% 이하 안정',     desc:`현재 ${tnxCur.toFixed(3)}%. 4.5% 넘으면 성장주 밸류 압박`,     cur:`${tnxCur.toFixed(3)}% (${tnxCur < 4.5 ? '충족!' : '미충족'})`, g:Math.round((tnxCur-3.5)/(5.5-3.5)*100),c:tnxCur>=4.5?'var(--re)':'var(--gr)'},
   ];
   const score=Object.values(chk).filter(Boolean).length;
   const verdict=()=>{
@@ -475,13 +538,11 @@ function T3() {
         <div className="card" style={{textAlign:'center'}}>
           <div className="ct">진입 신호 점수</div>
           <div className="bn" style={{fontSize:64,color:score>=5?'var(--gr)':score>=3?'var(--or)':score>=1?'var(--bl)':'var(--re)'}}>{score}/6</div>
-          <div className="sm" style={{marginTop:6}}>신호 충족 개수 (국채 금리 포함)</div>
+          <div className="sm" style={{marginTop:6}}>클릭으로 직접 체크</div>
           <div style={{marginTop:10}}>
-            {[0,1,2,3,4,5].map(i=>(
-              <div key={i} style={{height:5,borderRadius:3,marginBottom:3,background:i<score?'var(--gr)':'rgba(255,255,255,.1)',transition:'background .3s'}}/>
-            ))}
+            {[0,1,2,3,4,5].map(i=>(<div key={i} style={{height:5,borderRadius:3,marginBottom:3,background:i<score?'var(--gr)':'rgba(255,255,255,.1)'}}/>))}
           </div>
-          <div className="gb2" style={{marginTop:12,fontSize:11}}>3개 이상 충족 시 소량 진입 고려 / 6개 모두 충족 시 본격 진입</div>
+          <div className="gb2" style={{marginTop:12,fontSize:11}}>3개 이상 → 소량 진입 / 6개 모두 → 본격 진입</div>
         </div>
         <div className="card" style={{textAlign:'center'}}>
           <div className="ct">진입 판단</div>
@@ -490,31 +551,17 @@ function T3() {
             <div style={{fontSize:18,fontWeight:900,color:v.c,marginBottom:4}}>{v.t}</div>
             <div style={{fontSize:11,color:'var(--gY)',whiteSpace:'pre-line'}}>{v.d}</div>
           </div>
-          <div style={{marginTop:12,background:'var(--nv3)',borderRadius:8,padding:'10px 12px',border:'1px solid var(--bd)',textAlign:'left'}}>
-            <div style={{fontFamily:'IBM Plex Mono',fontSize:9,color:'var(--gY)',letterSpacing:1,marginBottom:6}}>US 10Y YIELD</div>
-            <div style={{display:'flex',alignItems:'center',gap:8}}>
-              <span style={{fontFamily:'Bebas Neue',fontSize:28,color:D.tnx.current>=D.tnx.threshold?'var(--re)':'var(--gr)'}}>{D.tnx.current}%</span>
-              <span className={`bdg ${D.tnx.current>=D.tnx.threshold?'br':'bg'}`} style={{fontSize:10}}>기준 4.5% {D.tnx.current>=D.tnx.threshold?'초과↑':'미만↓'}</span>
-            </div>
-            <div className="gb" style={{height:6,marginTop:6}}>
-              <div className="gf" style={{width:`${((D.tnx.current-3.5)/(5.5-3.5)*100).toFixed(0)}%`,background: D.tnx.current>=D.tnx.threshold ? 'linear-gradient(90deg,#22C55E,#EF4444)' : '#22C55E'}}/>
-            </div>
-          </div>
         </div>
       </div>
       <div className="card">
-        <div className="ct">신호 체크리스트 (6개) — 직접 클릭해서 체크하세요</div>
+        <div className="ct">신호 체크리스트 (6개) — 클릭해서 체크</div>
         {sigs.map(s=>(
           <div key={s.k} className="ci" onClick={()=>tog(s.k)}>
-            <div className={`cb ${chk[s.k]?'ck':''}`}>
-              {chk[s.k]&&<span style={{color:'#fff',fontSize:11,fontWeight:900}}>✓</span>}
-            </div>
+            <div className={`cb ${chk[s.k]?'ck':''}`}>{chk[s.k]&&<span style={{color:'#fff',fontSize:11,fontWeight:900}}>✓</span>}</div>
             <div style={{flex:1}}>
               <div style={{fontSize:12,fontWeight:700,color:chk[s.k]?s.c:'var(--wh)',marginBottom:2}}>{s.lbl}</div>
               <div style={{fontSize:10,color:'var(--gY)',marginBottom:4}}>{s.desc}</div>
-              <div className="gb" style={{height:4}}>
-                <div className="gf" style={{width:chk[s.k]?'100%':`${s.g}%`,background:chk[s.k]?s.c:'linear-gradient(90deg,var(--gr),var(--re))'}}/>
-              </div>
+              <div className="gb" style={{height:4}}><div className="gf" style={{width:chk[s.k]?'100%':`${s.g}%`,background:chk[s.k]?s.c:'linear-gradient(90deg,var(--gr),var(--re))'}}/></div>
               <div style={{fontSize:9,color:'var(--gy)',marginTop:3,fontFamily:'IBM Plex Mono'}}>{s.cur}</div>
             </div>
           </div>
@@ -524,6 +571,7 @@ function T3() {
   );
 }
 
+// ─── T4: 체크리스트 ────────────────────────────────────────────
 function T4() {
   const [done,setDone]=useState({});
   const tog=k=>setDone(p=>({...p,[k]:!p[k]}));
@@ -536,11 +584,10 @@ function T4() {
       {k:'a5',tx:'QQQ 1억 소량 매수 (장기 확신 포지션)'},
     ]},
     {t:'이번 주 모니터링',items:[
-      {k:'b1',tx:'TradingView → NDX 일봉 → MA200 → 24,350 돌파 알림 등록'},
+      {k:'b1',tx:'TradingView → NDX 일봉 → MA200 돌파 알림 등록'},
       {k:'b2',tx:'CNN Fear & Greed 북마크'},
       {k:'b3',tx:'FRED HY Spread 북마크'},
       {k:'b4',tx:'10년물 국채 금리 모니터링 — 4.5% 돌파 시 주의'},
-      {k:'b5',tx:'3월 28일(금) 캘린더 등록 — 이란 5일 유예 만료일 ★'},
     ]},
     {t:'200일선 재돌파 시 실행',items:[
       {k:'c1',tx:'돌파 확인 당일 종가 → TQQQ 2억 시장가 매수'},
@@ -572,18 +619,14 @@ function T4() {
             <div style={{fontFamily:'Bebas Neue',fontSize:40,color:pct>70?'var(--gr)':'var(--or)'}}>{pct}%</div>
           </div>
         </div>
-        <div className="gb" style={{height:10}}>
-          <div className="gf" style={{width:`${pct}%`,background:'linear-gradient(90deg,var(--go),var(--gr))'}}/>
-        </div>
+        <div className="gb" style={{height:10}}><div className="gf" style={{width:`${pct}%`,background:'linear-gradient(90deg,var(--go),var(--gr))'}}/></div>
       </div>
       {secs.map((sec,si)=>(
         <div className="card mg" key={si}>
           <div className="ct">{sec.t}</div>
           {sec.items.map(it=>(
             <div key={it.k} className="ci" onClick={()=>tog(it.k)}>
-              <div className={`cb ${done[it.k]?'ck':''}`}>
-                {done[it.k]&&<span style={{color:'#fff',fontSize:11,fontWeight:900}}>✓</span>}
-              </div>
+              <div className={`cb ${done[it.k]?'ck':''}`}>{done[it.k]&&<span style={{color:'#fff',fontSize:11,fontWeight:900}}>✓</span>}</div>
               <div className={`ctxt ${done[it.k]?'dn':''}`}>{it.tx}</div>
             </div>
           ))}
@@ -594,9 +637,57 @@ function T4() {
   );
 }
 
+// ─── App ───────────────────────────────────────────────────────
 function App() {
-  const [tab,setTab]=useState(0);
-  const tabs=['📊 시장 현황','💰 수익 시뮬레이터','🎯 바닥 신호판','✅ 실행 체크리스트'];
+  const [tab, setTab] = useState(0);
+  const [D, setD] = useState({});
+  const [fg, setFg] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState('');
+  const [hasError, setHasError] = useState(false);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setHasError(false);
+    try {
+      // Promise.allSettled: 하나 실패해도 나머지 계속 진행
+      const results = await Promise.allSettled([
+        fetchQuote('^GSPC'),
+        fetchQuote('^NDX'),
+        fetchQuote('TQQQ'),
+        fetchQuote('FNGU'),
+        fetchQuote('SOXL'),
+        fetchQuote('^VIX', '3mo'),
+        fetchQuote('GLD'),
+        fetchQuote('^TNX'),
+        fetchFearGreed(),
+      ]);
+      const [sp500, ndx, tqqq, fngu, soxl, vix, gold, tnx, fearGreed] =
+        results.map(r => r.status === 'fulfilled' ? r.value : null);
+
+      setD({ sp500, ndx, tqqq, fngu, soxl, vix, gold, tnx });
+      setFg(fearGreed);
+      setLastUpdate(now());
+
+      // 핵심 3개도 다 실패하면 에러 표시
+      if (!sp500 && !ndx && !tqqq) setHasError(true);
+    } catch(e) {
+      console.error(e);
+      setHasError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+    // 30분마다 자동 갱신
+    const timer = setInterval(loadData, 30 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [loadData]);
+
+  const tabs = ['📊 시장 현황','💰 수익 시뮬레이터','🎯 바닥 신호판','✅ 실행 체크리스트'];
+
   return (
     <>
       <style>{S}</style>
@@ -606,9 +697,19 @@ function App() {
             <div className="hdr-t">BangBro Dashboard</div>
             <div className="hdr-s">뱅브로식 미국주식 투자 모니터링 시스템</div>
           </div>
-          <div style={{textAlign:'right'}}>
-            <div style={{fontSize:11,color:'var(--gY)'}}><span className="ldot"/>최종 업데이트</div>
-            <div style={{fontFamily:'IBM Plex Mono',fontSize:12,color:'var(--gL)'}}>2026.03.25</div>
+          <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6}}>
+            {loading
+              ? <span className="err-badge">⟳ 데이터 로딩 중...</span>
+              : hasError
+              ? <span className="err-badge" onClick={loadData} style={{cursor:'pointer'}}>⚠️ 재시도 클릭</span>
+              : <span className="live-badge"><span className="ldot" style={{margin:0}}/> LIVE</span>
+            }
+            <div style={{fontFamily:'IBM Plex Mono',fontSize:11,color:'var(--gY)'}}>
+              {lastUpdate || '—'}
+            </div>
+            <button onClick={loadData} style={{background:'var(--nv3)',border:'1px solid var(--bd)',borderRadius:6,color:'var(--gY)',fontSize:10,padding:'3px 10px',cursor:'pointer',fontFamily:'IBM Plex Mono'}}>
+              🔄 새로고침
+            </button>
           </div>
         </div>
         <div className="tabs">
@@ -617,17 +718,27 @@ function App() {
           ))}
         </div>
         <div className="content">
-          {tab===0&&<T1/>}
-          {tab===1&&<T2/>}
-          {tab===2&&<T3/>}
-          {tab===3&&<T4/>}
+          {loading && Object.keys(D).length === 0 ? (
+            <div className="loading">
+              <div className="spin"/>
+              <div className="loading-txt">Yahoo Finance에서 실시간 데이터를 불러오는 중...</div>
+              <div style={{fontSize:11,color:'var(--gy)'}}>S&P500, NDX, TQQQ, FNGU, SOXL, VIX, Gold, TNX + 200일선 계산 중</div>
+            </div>
+          ) : (
+            <>
+              {tab===0 && <T1 D={D} fg={fg}/>}
+              {tab===1 && <T2 D={D}/>}
+              {tab===2 && <T3 D={D} fg={fg}/>}
+              {tab===3 && <T4/>}
+            </>
+          )}
         </div>
       </div>
     </>
   );
 }
 
-    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-  </script>
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
 </body>
 </html>
