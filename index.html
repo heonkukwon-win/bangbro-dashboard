@@ -482,12 +482,22 @@ function renderT1() {
     </div>
   </div>`;
 
-  // 나머지 단순 행
-  const simpleRows = [
-    {l:'10년물 국채 금리', v:`${D.tnx?.current?.toFixed(3)??'—'}%`, ok:tnxOk},
-    {l:'VIX 변동성',       v:`${fmt2(D.vix?.current)}`,              ok:vixOk},
-    {l:'Gold 안전자산',    v:`$${fmt2(D.gold?.current)}`,            ok:null},
-  ];
+  // 10년물 차트
+  const tnxChart = tnxHist.length>=2
+    ? miniLineChart(tnxHist.map(h=>h.val), tnxHist.map(h=>h.date), tnxOk?'#22C55E':'#EF4444', 4.5)
+    : '';
+
+  // VIX 차트
+  const vixHist = D.vix?.history??[];
+  const vixChart = vixHist.length>=2
+    ? miniLineChart(vixHist.map(h=>h.val), vixHist.map(h=>h.date), vixOk?'#22C55E':'#F97316', 20)
+    : '';
+
+  // Gold 차트
+  const goldHist = D.gold?.history??[];
+  const goldChart = goldHist.length>=2
+    ? miniLineChart(goldHist.map(h=>h.val).map(v=>Math.round(v)), goldHist.map(h=>h.date), '#F0C060', null)
+    : '';
 
   document.getElementById('signal-card').innerHTML=
     `<div class="ct">신호 체크판</div>` +
@@ -503,14 +513,18 @@ function renderT1() {
       `${FG??'—'}`,
       '한 자릿수 = 역대급 매수 기회',
       fgChart) +
-    simpleRows.map(s=>`
-    <div class="row">
-      <span class="row-l">${s.l}</span>
-      <div style="display:flex;align-items:center;gap:7px;">
-        <span class="row-r" style="color:${s.ok===true?'var(--gr)':s.ok===false?'var(--re)':'#EAB308'};font-size:10px;">${s.v}</span>
-        <span class="bdg ${s.ok===true?'bdg-g':s.ok===false?'bdg-r':'bdg-y'}" style="font-size:9px;padding:1px 7px;">${s.ok===true?'OK':s.ok===false?'NG':'—'}</span>
-      </div>
-    </div>`).join('');
+    sigRow('10년물 국채 금리', tnxOk,
+      `${D.tnx?.current?.toFixed(3)??'—'}%`,
+      '기준선 4.5% — 초과 시 성장주 압박',
+      tnxChart) +
+    sigRow('VIX 변동성', vixOk,
+      `${fmt2(D.vix?.current)}`,
+      '기준선 20 — 초과 시 고변동성 구간',
+      vixChart) +
+    sigRow('Gold 안전자산', null,
+      `$${fmt2(D.gold?.current)}`,
+      '안전자산 강세 = 리스크오프 심리',
+      goldChart);
 
   // ETF 카드
   const etfs=[{n:'TQQQ',d:'나스닥100 3배',data:D.tqqq},{n:'FNGU',d:'FANG+ 3배',data:D.fngu},{n:'SOXL',d:'반도체 3배',data:D.soxl}];
