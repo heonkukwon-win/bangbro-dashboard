@@ -72,13 +72,42 @@ export default async function handler(req, res) {
     };
   }
 
-  // Fear & Greed
+  // Fear & Greed (다중 엔드포인트 폴백)
   async function fetchFearGreed() {
-    const r = await fetch('https://production.dataviz.cnn.io/index/fearandgreed/graphdata', {
-      headers: { 'User-Agent': 'Mozilla/5.0' }
-    });
-    const j = await r.json();
-    return Math.round(j?.fear_and_greed?.score ?? 15);
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Accept': 'application/json',
+      'Referer': 'https://edition.cnn.com/',
+      'Origin': 'https://edition.cnn.com',
+    };
+
+    // 엔드포인트 1: 기본 CNN API
+    try {
+      const r = await fetch(
+        'https://production.dataviz.cnn.io/index/fearandgreed/graphdata',
+        { headers }
+      );
+      if (r.ok) {
+        const j = await r.json();
+        const score = j?.fear_and_greed?.score ?? j?.score ?? null;
+        if (score !== null) return Math.round(Number(score));
+      }
+    } catch {}
+
+    // 엔드포인트 2: 대체 CNN URL
+    try {
+      const r = await fetch(
+        'https://fear-and-greed-index.p.rapidapi.com/v1/fgi',
+        { headers }
+      );
+      if (r.ok) {
+        const j = await r.json();
+        const score = j?.fgi?.now?.value ?? null;
+        if (score !== null) return Math.round(Number(score));
+      }
+    } catch {}
+
+    return null;
   }
 
   try {
