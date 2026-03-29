@@ -120,6 +120,27 @@ input[type=range]{width:100%;accent-color:var(--go);cursor:pointer;}
 .yh-bar-wrap{flex:1;height:6px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden;}
 .yh-bar{height:100%;border-radius:3px;}
 .yh-val{font-family:'IBM Plex Mono',monospace;font-size:10px;min-width:36px;text-align:right;}
+/* ── KPI 클릭 카드 ── */
+.kpi-card{cursor:pointer;position:relative;transition:transform .2s,box-shadow .2s,border-color .3s;}
+.kpi-card.active{border-color:var(--gL) !important;box-shadow:0 0 0 2px rgba(240,192,96,.25),0 8px 32px rgba(0,0,0,.4);}
+.kpi-card:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.4);}
+.kpi-card .click-hint{position:absolute;bottom:6px;right:8px;font-size:8px;color:var(--gy);font-family:'IBM Plex Mono',monospace;opacity:.6;}
+/* ── 상세 패널 ── */
+.detail-panel{display:none;background:var(--nv2);border:1px solid var(--gL);border-radius:12px;
+  padding:20px;margin-bottom:14px;animation:fadeIn .25s ease;}
+.detail-panel.show{display:block;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+.dp-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;}
+.dp-close{background:none;border:1px solid var(--bd);border-radius:6px;color:var(--gY);
+  font-size:11px;padding:3px 10px;cursor:pointer;font-family:'IBM Plex Mono',monospace;}
+.dp-close:hover{border-color:var(--gL);color:var(--gL);}
+.dp-title{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--gY);letter-spacing:2px;text-transform:uppercase;}
+.dp-value{font-family:'Bebas Neue',cursive;font-size:48px;line-height:1;}
+.dp-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;}
+@media(max-width:600px){.dp-grid{grid-template-columns:1fr;}}
+.dp-stat{background:var(--nv3);border-radius:8px;padding:10px 14px;}
+.dp-stat-l{font-size:10px;color:var(--gY);margin-bottom:4px;}
+.dp-stat-v{font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:700;}
 /* ── 미니 라인 차트 ── */
 .mini-chart{width:100%;height:60px;margin:10px 0 4px;}
 .mini-chart svg{width:100%;height:100%;overflow:visible;}
@@ -155,6 +176,8 @@ input[type=range]{width:100%;accent-color:var(--go);cursor:pointer;}
 <!-- 탭1: 시장현황 -->
 <div class="content active" id="tab0">
   <div class="g5 mg" id="kpi-grid"></div>
+  <!-- 클릭 상세 패널 -->
+  <div class="detail-panel" id="detail-panel"></div>
   <div class="mg" id="yield-card"></div>
   <div class="g2">
     <div class="card" id="signal-card"></div>
@@ -351,6 +374,224 @@ async function loadData() {
 }
 
 // ══════════════════════════════════════════════════════════════
+// KPI 상세 패널
+// ══════════════════════════════════════════════════════════════
+let activeKpi = -1;
+
+function closeDetail() {
+  document.getElementById('detail-panel').classList.remove('show');
+  document.querySelectorAll('.kpi-card').forEach(c=>c.classList.remove('active'));
+  activeKpi = -1;
+}
+
+function openDetail(idx) {
+  // 같은 카드 다시 클릭하면 닫기
+  if (activeKpi === idx) { closeDetail(); return; }
+  activeKpi = idx;
+
+  document.querySelectorAll('.kpi-card').forEach((c,i)=>c.classList.toggle('active', i===idx));
+
+  const panel = document.getElementById('detail-panel');
+  panel.innerHTML = buildDetailHTML(idx);
+  panel.classList.add('show');
+
+  // 패널 위치로 부드럽게 스크롤
+  panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function buildDetailHTML(idx) {
+  const tnxOk = D.tnx?.current < 4.5;
+  const ndxOk = D.ndx?.current > D.ndx?.ma200;
+  const vixOk = D.vix?.current < 20;
+
+  const closeBtn = `<button class="dp-close" onclick="closeDetail()">✕ 닫기</button>`;
+
+  // ── 0: 진입 신호 ──────────────────────────────────────────
+  if (idx === 0) {
+    const checks = [
+      {l:'S&P500 > 200일선', ok: D.sp500?.current > D.sp500?.ma200},
+      {l:'NDX > 200일선',    ok: ndxOk},
+      {l:'10Y < 4.5%',       ok: tnxOk},
+      {l:'VIX < 20',         ok: vixOk},
+    ];
+    const okCnt = checks.filter(c=>c.ok).length;
+    const score = Math.round(okCnt/6*100);
+    return `
+      <div class="dp-header">
+        <div><div class="dp-title">진입 신호 종합</div>
+          <div class="dp-value" style="color:${okCnt>2?'var(--gr)':'var(--re)'};">${score}%</div>
+          <div class="sm">${okCnt}/6 충족</div>
+        </div>${closeBtn}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
+        ${checks.map(c=>`
+          <div style="background:var(--nv3);border-radius:8px;padding:10px 14px;
+            border:1px solid ${c.ok?'rgba(34,197,94,.3)':'rgba(229,62,62,.3)'};">
+            <div style="font-size:10px;color:var(--gY);margin-bottom:4px;">${c.l}</div>
+            <div style="font-size:18px;">${c.ok?'✅':'❌'}</div>
+          </div>`).join('')}
+      </div>
+      <div class="gb2" style="margin-top:14px;font-size:11px;">3개 이상 충족 시 소량 진입 고려 / 6개 모두 충족 시 본격 진입</div>`;
+  }
+
+  // ── 1: Fear & Greed ───────────────────────────────────────
+  if (idx === 1) {
+    const fg = FG ?? 0;
+    const fgColor = fg<20?'#22C55E':fg<40?'#86EFAC':fg<60?'#EAB308':fg<80?'#F97316':'#EF4444';
+    const fgLabel = fg<20?'극단적 공포':fg<40?'공포':fg<60?'중립':fg<80?'탐욕':'극단적 탐욕';
+    const fgDesc  = fg<20?'역사적 매수 기회 구간. 공포가 극에 달했을 때 시장은 반등 준비를 합니다.'
+                  : fg<40?'공포 구간. 시장 심리가 약해져 있습니다. 신중한 접근이 필요합니다.'
+                  : fg<60?'중립 구간. 시장 심리가 균형 상태입니다.'
+                  : fg<80?'탐욕 구간. 과열 신호를 주시하세요.'
+                  : '극단적 탐욕. 조정 가능성이 높습니다.';
+    return `
+      <div class="dp-header">
+        <div><div class="dp-title">Fear & Greed Index</div>
+          <div class="dp-value" style="color:${fgColor};">${FG??'—'}</div>
+          <div class="sm">${fgLabel}</div>
+        </div>${closeBtn}
+      </div>
+      <!-- 슬라이더 게이지 -->
+      <div style="margin:16px 0 8px;">
+        <div style="height:16px;border-radius:8px;background:linear-gradient(90deg,#22C55E,#86EFAC,#EAB308,#F97316,#EF4444);position:relative;">
+          <div style="position:absolute;top:-6px;left:calc(${fg}% - 7px);width:14px;height:28px;
+            background:white;border-radius:4px;box-shadow:0 0 8px rgba(0,0,0,.5);"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--gY);margin-top:8px;">
+          <span>0 극단공포</span><span>25 공포</span><span>50 중립</span><span>75 탐욕</span><span>100 극단탐욕</span>
+        </div>
+      </div>
+      <!-- 라인 차트 -->
+      <div style="margin-top:16px;">
+        <div style="font-size:10px;color:var(--gY);font-family:'IBM Plex Mono',monospace;letter-spacing:1px;margin-bottom:4px;">최근 추이 (단일 실시간값 — 일별 히스토리는 CNN 제공 없음)</div>
+        <div style="background:var(--nv3);border-radius:8px;padding:14px;text-align:center;">
+          <div style="font-family:'Bebas Neue',cursive;font-size:36px;color:${fgColor};">${FG??'—'}</div>
+          <div style="font-size:11px;color:var(--gY);">${fgLabel}</div>
+        </div>
+      </div>
+      <div style="margin-top:14px;padding:12px 14px;background:rgba(240,192,96,.08);border:1px solid rgba(240,192,96,.2);border-radius:10px;font-size:11px;color:var(--gL);line-height:1.7;">
+        ${fgDesc}
+      </div>
+      <div class="dp-grid">
+        <div class="dp-stat"><div class="dp-stat-l">매수 기준</div><div class="dp-stat-v" style="color:var(--gr);">≤ 20 (극단공포)</div></div>
+        <div class="dp-stat"><div class="dp-stat-l">현재 상태</div><div class="dp-stat-v" style="color:${fgColor};">${fgLabel}</div></div>
+      </div>`;
+  }
+
+  // ── 2: NDX 200일선 ───────────────────────────────────────
+  if (idx === 2) {
+    const cur = D.ndx?.current, ma = D.ndx?.ma200;
+    const hist = D.ndx?.history ?? [];
+    const diff = cur && ma ? ((cur-ma)/ma*100).toFixed(2) : null;
+    const chart = hist.length>=2 ? miniLineChart(hist.map(h=>h.val), hist.map(h=>h.date), ndxOk?'#22C55E':'#EF4444', ma) : '';
+    return `
+      <div class="dp-header">
+        <div><div class="dp-title">나스닥 100 (NDX) vs 200일선</div>
+          <div class="dp-value" style="color:${ndxOk?'var(--gr)':'var(--re)'};">${cur?.toLocaleString()??'—'}</div>
+          <div class="sm">200일선: ${ma?.toLocaleString()??'—'} &nbsp;|&nbsp;
+            <span style="color:${ndxOk?'var(--gr)':'var(--re)'};">${diff!=null?(ndxOk?'+':'')+diff+'%':''}</span>
+          </div>
+        </div>${closeBtn}
+      </div>
+      <div style="margin-top:8px;">
+        <div style="font-size:10px;color:var(--gY);font-family:'IBM Plex Mono',monospace;letter-spacing:1px;margin-bottom:4px;">최근 7일 종가 추이 (점선 = 200일선)</div>
+        ${chart}
+      </div>
+      <div style="margin-top:12px;padding:10px 14px;border-radius:8px;font-size:12px;font-weight:700;
+        background:${ndxOk?'rgba(34,197,94,.1)':'rgba(229,62,62,.1)'};
+        border:1px solid ${ndxOk?'rgba(34,197,94,.3)':'rgba(229,62,62,.3)'};
+        color:${ndxOk?'#86EFAC':'#FCA5A5'};">
+        ${ndxOk?'✅ 200일선 상회 — 레버리지 진입 환경':'❌ 200일선 하회 — 레버리지 보유 금지'}
+      </div>
+      <div class="dp-grid">
+        <div class="dp-stat"><div class="dp-stat-l">현재가</div><div class="dp-stat-v" style="color:${ndxOk?'var(--gr)':'var(--re)'};">${cur?.toLocaleString()??'—'}</div></div>
+        <div class="dp-stat"><div class="dp-stat-l">200일 이동평균</div><div class="dp-stat-v" style="color:var(--gZ);">${ma?.toLocaleString()??'—'}</div></div>
+        <div class="dp-stat"><div class="dp-stat-l">괴리율</div><div class="dp-stat-v" style="color:${ndxOk?'var(--gr)':'var(--re)'};">${diff!=null?(ndxOk?'+':'')+diff+'%':'—'}</div></div>
+        <div class="dp-stat"><div class="dp-stat-l">진입 판단</div><div class="dp-stat-v" style="color:${ndxOk?'var(--gr)':'var(--re)'};">${ndxOk?'진입 검토 가능':'현금 보유'}</div></div>
+      </div>`;
+  }
+
+  // ── 3: US 10Y Yield ───────────────────────────────────────
+  if (idx === 3) {
+    const cur = D.tnx?.current, thr = 4.5, MIN = 3.5, MAX = 5.5;
+    const hist = D.tnx?.history ?? [];
+    const pct = cur ? Math.min(100,Math.max(0,(cur-MIN)/(MAX-MIN)*100)).toFixed(1) : 50;
+    const thrPct = ((thr-MIN)/(MAX-MIN)*100).toFixed(1);
+    const pinC = tnxOk?'#22C55E':'#EF4444';
+    const fillG = tnxOk?'linear-gradient(90deg,#22C55E,#4ADE80)':'linear-gradient(90deg,#22C55E,#EAB308 40%,#EF4444)';
+    const chart = hist.length>=2 ? miniLineChart(hist.map(h=>h.val), hist.map(h=>h.date), tnxOk?'#22C55E':'#EF4444', thr) : '';
+    return `
+      <div class="dp-header">
+        <div><div class="dp-title">미국 10년물 국채 금리 (US10Y)</div>
+          <div class="dp-value" style="color:${pinC};">${cur?.toFixed(3)??'—'}%</div>
+          <div class="sm">기준선 ${thr}% 대비 <span style="color:${pinC};">${cur?(tnxOk?'−':'+')+(Math.abs(cur-thr).toFixed(3))+'%':''}</span></div>
+        </div>${closeBtn}
+      </div>
+      <!-- 게이지 바 -->
+      <div style="position:relative;height:14px;border-radius:7px;margin:16px 0 8px;
+        background:linear-gradient(90deg,#22C55E 0%,#22C55E 47%,#EAB308 47%,#EAB308 52%,#EF4444 52%,#EF4444 100%);">
+        <div style="position:absolute;bottom:0;left:0;height:14px;border-radius:7px;width:${pct}%;background:${fillG};opacity:.9;"></div>
+        <div style="position:absolute;top:-6px;left:${thrPct}%;transform:translateX(-50%);width:2px;height:26px;background:white;border-radius:1px;"></div>
+        <div style="position:absolute;top:-26px;left:${thrPct}%;transform:translateX(-50%);font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(255,255,255,.8);">4.5%</div>
+        <div style="position:absolute;bottom:18px;left:${pct}%;transform:translateX(-50%);font-family:'Bebas Neue',cursive;font-size:16px;color:${pinC};white-space:nowrap;">${cur?.toFixed(3)??''}%</div>
+        <div style="position:absolute;top:-4px;left:${pct}%;transform:translateX(-50%);width:4px;height:22px;background:${pinC};border-radius:2px;box-shadow:0 0 8px ${pinC};"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--gY);margin-bottom:16px;">
+        ${['3.5','3.8','4.0','4.2','4.4','4.5','4.7','5.0','5.2','5.5'].map(t=>`<span>${t}</span>`).join('')}
+      </div>
+      <!-- 라인 차트 -->
+      <div style="font-size:10px;color:var(--gY);font-family:'IBM Plex Mono',monospace;letter-spacing:1px;margin-bottom:4px;">최근 7일 추이 (점선 = 4.5% 기준)</div>
+      ${chart}
+      <div class="dp-grid" style="margin-top:12px;">
+        <div class="dp-stat"><div class="dp-stat-l">현재 금리</div><div class="dp-stat-v" style="color:${pinC};">${cur?.toFixed(3)??'—'}%</div></div>
+        <div class="dp-stat"><div class="dp-stat-l">위험 기준</div><div class="dp-stat-v" style="color:var(--gZ);">4.5% 초과</div></div>
+        <div class="dp-stat"><div class="dp-stat-l">현재 구간</div><div class="dp-stat-v" style="color:${pinC};">${tnxOk?'안정':'위험'}</div></div>
+        <div class="dp-stat"><div class="dp-stat-l">성장주 영향</div><div class="dp-stat-v" style="color:${pinC};">${tnxOk?'부담 낮음':'밸류 압박↑'}</div></div>
+      </div>`;
+  }
+
+  // ── 4: VIX ───────────────────────────────────────────────
+  if (idx === 4) {
+    const cur = D.vix?.current;
+    const hist = D.vix?.history ?? [];
+    const vixColor = cur<15?'#22C55E':cur<20?'#86EFAC':cur<30?'#F97316':'#EF4444';
+    const vixLabel = cur<15?'매우 안정':cur<20?'안정':cur<30?'주의':cur<40?'고변동':'극단 공포';
+    const chart = hist.length>=2 ? miniLineChart(hist.map(h=>h.val), hist.map(h=>h.date), vixColor, 20) : '';
+    const barW = Math.min(100, (cur??0)/50*100).toFixed(0);
+    return `
+      <div class="dp-header">
+        <div><div class="dp-title">VIX 공포 지수</div>
+          <div class="dp-value" style="color:${vixColor};">${fmt2(cur)}</div>
+          <div class="sm">${vixLabel}</div>
+        </div>${closeBtn}
+      </div>
+      <!-- VIX 게이지 -->
+      <div style="margin:14px 0 6px;">
+        <div style="height:12px;border-radius:6px;background:linear-gradient(90deg,#22C55E,#86EFAC,#EAB308,#F97316,#EF4444);position:relative;">
+          <div style="position:absolute;top:-5px;left:calc(${barW}% - 6px);width:12px;height:22px;background:white;border-radius:3px;box-shadow:0 0 6px rgba(0,0,0,.5);"></div>
+          <div style="position:absolute;top:-5px;left:calc(${(20/50*100).toFixed(0)}% - 1px);width:2px;height:22px;background:rgba(255,255,255,.8);border-radius:1px;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--gY);margin-top:6px;">
+          <span>0 매우 안정</span><span style="color:rgba(255,255,255,.5);">│20</span><span>50+ 극단 공포</span>
+        </div>
+      </div>
+      <!-- 라인 차트 -->
+      <div style="margin-top:16px;">
+        <div style="font-size:10px;color:var(--gY);font-family:'IBM Plex Mono',monospace;letter-spacing:1px;margin-bottom:4px;">최근 추이 (점선 = 20 기준)</div>
+        ${chart}
+      </div>
+      <div class="dp-grid" style="margin-top:12px;">
+        <div class="dp-stat"><div class="dp-stat-l">현재 VIX</div><div class="dp-stat-v" style="color:${vixColor};">${fmt2(cur)}</div></div>
+        <div class="dp-stat"><div class="dp-stat-l">안정 기준</div><div class="dp-stat-v" style="color:var(--gZ);">20 이하</div></div>
+        <div class="dp-stat"><div class="dp-stat-l">현재 구간</div><div class="dp-stat-v" style="color:${vixColor};">${vixLabel}</div></div>
+        <div class="dp-stat"><div class="dp-stat-l">레버리지 환경</div><div class="dp-stat-v" style="color:${vixOk?'var(--gr)':'var(--re)'};">${vixOk?'진입 우호':'진입 비우호'}</div></div>
+      </div>`;
+  }
+
+  return '';
+}
+
+// ══════════════════════════════════════════════════════════════
 // 탭1 렌더
 // ══════════════════════════════════════════════════════════════
 function renderT1() {
@@ -377,13 +618,14 @@ function renderT1() {
      color:vixOk?'gr':'or', bar:Math.min(100,(D.vix?.current??25)*2),
      barC:'var(--or)', bdg:vixOk?'bdg-g':'bdg-y', bdgTxt:'변동성 지수'},
   ];
-  document.getElementById('kpi-grid').innerHTML=kpis.map(k=>`
-    <div class="card">
+  document.getElementById('kpi-grid').innerHTML=kpis.map((k,i)=>`
+    <div class="card kpi-card" onclick="openDetail(${i})" id="kpi-${i}">
       <div class="ct">${k.ct}</div>
       <div class="bn ${k.color}">${k.val}</div>
       <div class="sm" style="margin-top:6px;">${k.sub}</div>
       <div class="gb"><div class="gf" style="width:${k.bar}%;background:${k.barC};"></div></div>
       <span class="bdg ${k.bdg}">${k.bdgTxt}</span>
+      <span class="click-hint">▼ 클릭</span>
     </div>`).join('');
 
   // 국채 금리 게이지
