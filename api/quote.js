@@ -7,7 +7,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET');
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate'); // 5분 캐시
 
-  const symbols = ['^GSPC', '^NDX', 'TQQQ', 'FNGU', 'SOXL', '^VIX', 'GLD', '^TNX'];
+  const symbols = ['^GSPC', '^NDX', 'TQQQ', 'FNGU', 'SOXL', '^VIX', 'GLD', '^TNX', 'CL=F'];
 
   async function fetchQuote(symbol) {
     const range = symbol === '^VIX' ? '3mo' : '1y';
@@ -116,11 +116,11 @@ export default async function handler(req, res) {
       fetchFearGreed(),
     ]);
 
-    const [sp500, ndx, tqqq, fngu, soxl, vix, gold, tnx, fg] =
+    const [sp500, ndx, tqqq, fngu, soxl, vix, gold, tnx, wti, fg] =
       results.map(r => r.status === 'fulfilled' ? r.value : null);
 
     res.status(200).json({
-      sp500, ndx, tqqq, fngu, soxl, vix, gold, tnx,
+      sp500, ndx, tqqq, fngu, soxl, vix, gold, tnx, wti,
       fg,
       updatedAt: new Date().toISOString(),
     });
