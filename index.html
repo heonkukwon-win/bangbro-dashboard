@@ -356,7 +356,7 @@ async function loadData() {
     const data = await fetchAllData();
     D={sp500:data.sp500,ndx:data.ndx,tqqq:data.tqqq,
        fngu:data.fngu,soxl:data.soxl,vix:data.vix,
-       gold:data.gold,tnx:data.tnx};
+       gold:data.gold,tnx:data.tnx,wti:data.wti};
     FG=data.fg;
     document.getElementById('update-time').textContent=nowStr();
     document.getElementById('live-badge').className='live-badge';
@@ -587,6 +587,57 @@ function buildDetailHTML(idx) {
       </div>`;
   }
 
+  // ── 5: WTI 유가 ─────────────────────────────────────────────
+  if (idx === 5) {
+    const cur = D.wti?.current;
+    const hist = D.wti?.history ?? [];
+    const THR = 95;
+    const wtiOk2 = cur != null && cur < THR;
+    const wtiColor = cur<70?'#22C55E':cur<85?'#86EFAC':cur<95?'#EAB308':cur<110?'#F97316':'#EF4444';
+    const wtiLabel = cur<70?'매우 안정':cur<85?'안정':cur<95?'주의 근접':cur<110?'위험':'고위험';
+    const chart = hist.length>=2 ? miniLineChart(hist.map(h=>h.val), hist.map(h=>h.date), wtiColor, THR) : '';
+    const barW = cur ? Math.min(100,(cur/130*100)).toFixed(0) : 0;
+    const thrW = (THR/130*100).toFixed(0);
+    return `
+      <div class="dp-header">
+        <div><div class="dp-title">WTI 원유 선물 (CL=F)</div>
+          <div class="dp-value" style="color:${wtiColor};">$${fmt2(cur)}</div>
+          <div class="sm">${wtiLabel} &nbsp;|&nbsp; 기준선 $95</div>
+        </div>${closeBtn}
+      </div>
+      <!-- 게이지 바 -->
+      <div style="margin:16px 0 6px;">
+        <div style="height:12px;border-radius:6px;background:linear-gradient(90deg,#22C55E,#86EFAC 40%,#EAB308 60%,#F97316 75%,#EF4444 100%);position:relative;">
+          <div style="position:absolute;top:-5px;left:calc(${barW}% - 6px);width:12px;height:22px;
+            background:white;border-radius:3px;box-shadow:0 0 6px rgba(0,0,0,.5);"></div>
+          <div style="position:absolute;top:-5px;left:calc(${thrW}% - 1px);width:2px;height:22px;background:rgba(255,255,255,.8);border-radius:1px;"></div>
+          <div style="position:absolute;top:-22px;left:calc(${thrW}%);transform:translateX(-50%);font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(255,255,255,.7);">$95</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--gY);margin-top:6px;">
+          <span>$40 매우 안정</span><span style="color:rgba(255,255,255,.4);">│$95</span><span>$130+ 고위험</span>
+        </div>
+      </div>
+      <!-- 라인 차트 -->
+      <div style="margin-top:16px;">
+        <div style="font-size:10px;color:var(--gY);font-family:'IBM Plex Mono',monospace;letter-spacing:1px;margin-bottom:4px;">최근 7일 추이 (점선 = $95 기준)</div>
+        ${chart}
+      </div>
+      <div class="dp-grid" style="margin-top:12px;">
+        <div class="dp-stat"><div class="dp-stat-l">현재 WTI</div><div class="dp-stat-v" style="color:${wtiColor};">$${fmt2(cur)}</div></div>
+        <div class="dp-stat"><div class="dp-stat-l">안정 기준</div><div class="dp-stat-v" style="color:var(--gZ);">$95 이하</div></div>
+        <div class="dp-stat"><div class="dp-stat-l">현재 구간</div><div class="dp-stat-v" style="color:${wtiColor};">${wtiLabel}</div></div>
+        <div class="dp-stat"><div class="dp-stat-l">시장 영향</div><div class="dp-stat-v" style="color:${wtiOk2?'var(--gr)':'var(--re)'};">${wtiOk2?'인플레 부담 낮음':'에너지 리스크↑'}</div></div>
+      </div>
+      <div style="margin-top:12px;padding:10px 14px;border-radius:8px;font-size:11px;line-height:1.7;
+        background:${wtiOk2?'rgba(34,197,94,.08)':'rgba(249,115,22,.08)'};
+        border:1px solid ${wtiOk2?'rgba(34,197,94,.2)':'rgba(249,115,22,.2)'};
+        color:${wtiOk2?'#86EFAC':'#FED7AA'};">
+        ${wtiOk2
+          ? '$95 이하 안정권. 에너지 비용 부담이 낮아 기업 마진과 소비 심리에 우호적입니다.'
+          : '$95 초과. 에너지 비용 상승이 인플레이션 압력을 높이고 연준의 금리 인상 가능성을 높입니다.'}
+      </div>`;
+  }
+
   return '';
 }
 
@@ -598,6 +649,7 @@ function renderT1() {
   const ndxOk = D.ndx?.current > D.ndx?.ma200;
   const sp5Ok = D.sp500?.current > D.sp500?.ma200;
   const vixOk = D.vix?.current < 20;
+  const wtiOk = D.wti?.current != null && D.wti.current < 95;
 
   // KPI 카드 5개
   const kpis=[
@@ -616,6 +668,9 @@ function renderT1() {
     {ct:'VIX', val:fmt2(D.vix?.current), sub:vixOk?'안정':'고변동성',
      color:vixOk?'gr':'or', bar:Math.min(100,(D.vix?.current??25)*2),
      barC:'var(--or)', bdg:vixOk?'bdg-g':'bdg-y', bdgTxt:'변동성 지수'},
+    {ct:'WTI 유가', val:`$${fmt2(D.wti?.current)}`, sub:wtiOk?'안정 ($95 이하)':'주의 ($95 초과)',
+     color:wtiOk?'gr':'or', bar:D.wti?.current?Math.min(100,(D.wti.current/130*100).toFixed(0)):50,
+     barC:wtiOk?'var(--gr)':'linear-gradient(90deg,var(--gr),var(--or))', bdg:wtiOk?'bdg-g':'bdg-y', bdgTxt:wtiOk?'안정':'주의'},
   ];
   document.getElementById('kpi-grid').innerHTML=kpis.map((k,i)=>`
     <div class="card kpi-card" onclick="openDetail(${i})" id="kpi-${i}">
@@ -714,7 +769,19 @@ function renderT1() {
     sigRow('Gold 안전자산', null,
       `$${fmt2(D.gold?.current)}`,
       '안전자산 강세 = 리스크오프 심리',
-      goldChart);
+      goldChart) +
+
+  // WTI 차트
+  (()=>{
+    const wtiHist = D.wti?.history??[];
+    const wtiChart = wtiHist.length>=2
+      ? miniLineChart(wtiHist.map(h=>h.val), wtiHist.map(h=>h.date), wtiOk?'#22C55E':'#F97316', 95)
+      : '';
+    return sigRow('WTI 유가', wtiOk,
+      `$${fmt2(D.wti?.current)}`,
+      '기준선 $95 — 초과 시 인플레이션·에너지 리스크',
+      wtiChart);
+  })();
 
   // ETF 카드
   const etfs=[{n:'TQQQ',d:'나스닥100 3배',data:D.tqqq},{n:'FNGU',d:'FANG+ 3배',data:D.fngu},{n:'SOXL',d:'반도체 3배',data:D.soxl}];
