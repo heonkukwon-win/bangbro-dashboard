@@ -178,7 +178,6 @@ input[type=range]{width:100%;accent-color:var(--go);cursor:pointer;}
   <div class="g5 mg" id="kpi-grid"></div>
   <!-- 클릭 상세 패널 -->
   <div class="detail-panel" id="detail-panel"></div>
-  <div class="mg" id="yield-card"></div>
   <div class="g2">
     <div class="card" id="signal-card"></div>
     <div>
@@ -628,57 +627,6 @@ function renderT1() {
       <span class="click-hint">▼ 클릭</span>
     </div>`).join('');
 
-  // 국채 금리 게이지
-  if(D.tnx){
-    const cur=D.tnx.current, thr=4.5, MIN=3.5, MAX=5.5;
-    const isRisk=cur>=thr;
-    const pct=Math.min(100,Math.max(0,(cur-MIN)/(MAX-MIN)*100)).toFixed(1);
-    const thrPct=((thr-MIN)/(MAX-MIN)*100).toFixed(1);
-    const pinC=isRisk?'#EF4444':'#22C55E';
-    const fillG=isRisk?'linear-gradient(90deg,#22C55E,#EAB308 40%,#EF4444)':'linear-gradient(90deg,#22C55E,#4ADE80)';
-    const hist=D.tnx.history??[];
-    const maxH=hist.length?Math.max(...hist.map(h=>h.val)):cur;
-    document.getElementById('yield-card').innerHTML=`
-      <div class="card">
-        <div class="ct">미국 10년물 국채 금리 (US10Y) — 실시간</div>
-        <div class="fb" style="margin-bottom:4px;">
-          <div>
-            <div class="bn ${isRisk?'re':'gr'}">${cur.toFixed(3)}%</div>
-            <div class="sm" style="margin-top:3px;">기준선 ${thr}% 대비
-              <span style="color:${isRisk?'var(--re)':'var(--gr)'};font-weight:700;">
-                ${isRisk?'+':'−'}${Math.abs(cur-thr).toFixed(3)}%
-              </span>
-            </div>
-          </div>
-          <span class="bdg ${isRisk?'bdg-r':'bdg-g'}" style="font-size:12px;padding:5px 14px;">
-            ${isRisk?'⚠️ 위험 구간':'✅ 안정 구간'}
-          </span>
-        </div>
-        <div class="yield-gauge-wrap">
-          <div class="yield-ticks">${['3.5','3.8','4.0','4.2','4.4','4.5','4.7','5.0','5.2','5.5'].map(t=>`<span>${t}</span>`).join('')}</div>
-          <div class="yield-track"></div>
-          <div class="yield-fill" style="width:${pct}%;background:${fillG};"></div>
-          <div class="yield-line" style="left:${thrPct}%;"><div class="yield-line-label" style="left:50%;">4.5%</div></div>
-          <div class="yield-pin" style="left:${pct}%;background:${pinC};"></div>
-          <div class="yield-pin-label" style="left:${pct}%;color:${pinC};">${cur.toFixed(3)}%</div>
-        </div>
-        <div style="border-radius:8px;padding:10px 14px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:8px;margin-top:10px;border:1px solid;
-          background:${isRisk?'rgba(239,68,68,.1)':'rgba(34,197,94,.1)'};
-          border-color:${isRisk?'rgba(239,68,68,.35)':'rgba(34,197,94,.35)'};
-          color:${isRisk?'#FCA5A5':'#86EFAC'};">
-          <span style="font-size:16px;">${isRisk?'🔴':'🟢'}</span>
-          <div>${isRisk?`현재 ${cur.toFixed(3)}% — 4.5% 초과. 성장주 하락 압력 증가.`:`현재 ${cur.toFixed(3)}% — 4.5% 미만. 상대적 안정 구간.`}</div>
-        </div>
-        ${hist.length?`<div style="margin-top:12px;">
-          <div style="font-size:10px;color:var(--gY);margin-bottom:6px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;">최근 추이</div>
-          ${hist.map(h=>`<div class="yh-row">
-            <span class="yh-date">${h.date}</span>
-            <div class="yh-bar-wrap"><div class="yh-bar" style="width:${(h.val/maxH*100).toFixed(0)}%;background:${h.val>=thr?'var(--re)':'var(--gr)'};"></div></div>
-            <span class="yh-val" style="color:${h.val>=thr?'var(--re)':'var(--gr)'};">${h.val}%</span>
-          </div>`).join('')}
-        </div>`:''}
-      </div>`;
-  }
 
   // 신호 체크판 (미니 차트 포함)
   // S&P500 히스토리 (최근 7일 종가 vs 200일선)
