@@ -120,6 +120,13 @@ input[type=range]{width:100%;accent-color:var(--go);cursor:pointer;}
 .yh-bar-wrap{flex:1;height:6px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden;}
 .yh-bar{height:100%;border-radius:3px;}
 .yh-val{font-family:'IBM Plex Mono',monospace;font-size:10px;min-width:36px;text-align:right;}
+/* ── 미니 라인 차트 ── */
+.mini-chart{width:100%;height:60px;margin:10px 0 4px;}
+.mini-chart svg{width:100%;height:100%;overflow:visible;}
+.chart-label{display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--gY);margin-top:2px;}
+/* ── 신호 차트 카드 ── */
+.sig-chart-wrap{margin:8px 0 4px;padding:10px 12px;background:var(--nv3);border-radius:8px;}
+.sig-chart-title{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--gY);letter-spacing:1px;margin-bottom:6px;}
 </style>
 </head>
 <body>
@@ -265,6 +272,54 @@ async function fetchAllData() {
 }
 
 // ══════════════════════════════════════════════════════════════
+// 미니 라인 차트 생성 함수
+// ══════════════════════════════════════════════════════════════
+function miniLineChart(values, labels, color, refLine) {
+  if (!values || values.length < 2) return '<div style="color:var(--gY);font-size:10px;text-align:center;padding:16px 0;">데이터 없음</div>';
+  const W = 300, H = 60, PAD = 4;
+  const min = Math.min(...values) * 0.999;
+  const max = Math.max(...values) * 1.001;
+  const range = max - min || 1;
+  const pts = values.map((v, i) => {
+    const x = PAD + (i / (values.length - 1)) * (W - PAD * 2);
+    const y = H - PAD - ((v - min) / range) * (H - PAD * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  // 기준선 (예: 4.5%)
+  let refSvg = '';
+  if (refLine != null) {
+    const ry = H - PAD - ((refLine - min) / range) * (H - PAD * 2);
+    refSvg = `<line x1="${PAD}" y1="${ry.toFixed(1)}" x2="${W - PAD}" y2="${ry.toFixed(1)}"
+      stroke="rgba(255,255,255,0.3)" stroke-width="1" stroke-dasharray="4,3"/>
+    <text x="${W - PAD + 2}" y="${(ry + 3).toFixed(1)}" fill="rgba(255,255,255,0.5)"
+      font-size="8" font-family="IBM Plex Mono,monospace">${refLine}</text>`;
+  }
+  // 그라디언트 영역
+  const areaPath = `M${pts[0]} ${pts.slice(1).map(p=>'L'+p).join(' ')} L${(W-PAD).toFixed(1)},${H-PAD} L${PAD},${H-PAD} Z`;
+  const lastPt = pts[pts.length - 1].split(',');
+  return `
+    <div class="mini-chart">
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="cg_${color.replace(/[^a-z]/gi,'')}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${color}" stop-opacity="0.25"/>
+            <stop offset="100%" stop-color="${color}" stop-opacity="0.02"/>
+          </linearGradient>
+        </defs>
+        <path d="${areaPath}" fill="url(#cg_${color.replace(/[^a-z]/gi,'')})" />
+        <polyline points="${pts.join(' ')}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+        ${refSvg}
+        <circle cx="${lastPt[0]}" cy="${lastPt[1]}" r="3" fill="${color}" stroke="var(--nv2)" stroke-width="1.5"/>
+      </svg>
+    </div>
+    <div class="chart-label">
+      <span>${labels[0]??''}</span>
+      <span style="color:${color};font-weight:700;">${values[values.length-1]}</span>
+      <span>${labels[labels.length-1]??''}</span>
+    </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
 // 전역 상태
 // ══════════════════════════════════════════════════════════════
 let D={}, FG=null;
@@ -383,16 +438,72 @@ function renderT1() {
       </div>`;
   }
 
-  // 신호 체크판
-  const sigs=[
-    {l:'S&P500 vs 200일선', v:`${fmt2(D.sp500?.current)} / ${fmt2(D.sp500?.ma200)}`, ok:sp5Ok},
-    {l:'NDX vs 200일선',    v:`${fmt2(D.ndx?.current)} / ${fmt2(D.ndx?.ma200)}`,     ok:ndxOk},
-    {l:'Fear & Greed',      v:`${FG??'—'} (${FG<20?'극단공포':FG<40?'공포':FG<60?'중립':'탐욕'})`, ok:FG!=null&&FG<20},
-    {l:'10년물 국채 금리',  v:`${D.tnx?.current?.toFixed(3)??'—'}%`,                 ok:tnxOk},
-    {l:'VIX 변동성',        v:`${fmt2(D.vix?.current)}`,                              ok:vixOk},
-    {l:'Gold 안전자산',     v:`$${fmt2(D.gold?.current)}`,                            ok:null},
+  // 신호 체크판 (미니 차트 포함)
+  // S&P500 히스토리 (최근 7일 종가 vs 200일선)
+  const sp5Hist = D.sp500?.history??[];
+  const ndxHist = D.ndx?.history??[];
+  const tnxHist = D.tnx?.history??[];
+
+  function sigRow(label, ok, mainVal, subVal, chartHtml) {
+    const c = ok===true?'var(--gr)':ok===false?'var(--re)':'#EAB308';
+    const bdg = ok===true?'bdg-g':ok===false?'bdg-r':'bdg-y';
+    const txt = ok===true?'OK':ok===false?'NG':'—';
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--bd);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <span style="font-size:11px;font-weight:700;color:var(--gZ);">${label}</span>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:${c};">${mainVal}</span>
+          <span class="bdg ${bdg}" style="font-size:9px;padding:1px 7px;">${txt}</span>
+        </div>
+      </div>
+      ${subVal?`<div style="font-size:9px;color:var(--gY);margin-bottom:4px;">${subVal}</div>`:''}
+      ${chartHtml}
+    </div>`;
+  }
+
+  // S&P500 차트: 종가 + 200일선 수평 기준선
+  const sp5Chart = sp5Hist.length>=2
+    ? miniLineChart(sp5Hist.map(h=>h.val), sp5Hist.map(h=>h.date), sp5Ok?'#22C55E':'#EF4444', D.sp500?.ma200??null)
+    : '';
+  // NDX 차트
+  const ndxChart = ndxHist.length>=2
+    ? miniLineChart(ndxHist.map(h=>h.val), ndxHist.map(h=>h.date), ndxOk?'#22C55E':'#EF4444', D.ndx?.ma200??null)
+    : '';
+  // Fear & Greed — 단일값이라 게이지 바로 표시
+  const fgPct = FG!=null ? Math.round(FG) : 0;
+  const fgColor = FG<20?'#22C55E':FG<40?'#86EFAC':FG<60?'#EAB308':FG<80?'#F97316':'#EF4444';
+  const fgLabel = FG<20?'극단적 공포':FG<40?'공포':FG<60?'중립':FG<80?'탐욕':'극단적 탐욕';
+  const fgChart = `<div style="margin:6px 0 2px;">
+    <div style="height:8px;border-radius:4px;background:linear-gradient(90deg,#22C55E,#86EFAC,#EAB308,#F97316,#EF4444);position:relative;overflow:visible;">
+      <div style="position:absolute;top:-4px;left:calc(${fgPct}% - 5px);width:10px;height:16px;background:white;border-radius:3px;box-shadow:0 0 6px rgba(0,0,0,.5);"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--gY);margin-top:6px;">
+      <span>극단공포 0</span><span style="color:${fgColor};font-weight:700;">${FG??'—'} ${fgLabel}</span><span>극단탐욕 100</span>
+    </div>
+  </div>`;
+
+  // 나머지 단순 행
+  const simpleRows = [
+    {l:'10년물 국채 금리', v:`${D.tnx?.current?.toFixed(3)??'—'}%`, ok:tnxOk},
+    {l:'VIX 변동성',       v:`${fmt2(D.vix?.current)}`,              ok:vixOk},
+    {l:'Gold 안전자산',    v:`$${fmt2(D.gold?.current)}`,            ok:null},
   ];
-  document.getElementById('signal-card').innerHTML=`<div class="ct">신호 체크판</div>`+sigs.map(s=>`
+
+  document.getElementById('signal-card').innerHTML=
+    `<div class="ct">신호 체크판</div>` +
+    sigRow('S&P500 vs 200일선', sp5Ok,
+      `${fmt2(D.sp500?.current)}`,
+      `200일선: ${fmt2(D.sp500?.ma200)}`,
+      sp5Chart) +
+    sigRow('NDX vs 200일선', ndxOk,
+      `${fmt2(D.ndx?.current)}`,
+      `200일선: ${fmt2(D.ndx?.ma200)}`,
+      ndxChart) +
+    sigRow('Fear & Greed', FG!=null&&FG<20,
+      `${FG??'—'}`,
+      '한 자릿수 = 역대급 매수 기회',
+      fgChart) +
+    simpleRows.map(s=>`
     <div class="row">
       <span class="row-l">${s.l}</span>
       <div style="display:flex;align-items:center;gap:7px;">
