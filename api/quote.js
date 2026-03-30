@@ -110,18 +110,63 @@ export default async function handler(req, res) {
     return null;
   }
 
+  // 뉴스 RSS 파싱 (이란·중동 관련 키워드 필터)
+  async function fetchNews() {
+    const KEYWORDS = ['iran','tehran','hormuz','middle east','nuclear','sanction',
+                      '이란','호르무즈','중동','핵','제재','원유','oil'];
+    const feeds = [
+      { src: 'CNN',  url: 'https://rss.cnn.com/rss/edition_world.rss' },
+      { src: 'WSJ',  url: 'https://feeds.a.dj.com/rss/RSSWorldNews.xml' },
+    ];
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (compatible; newsbot/1.0)',
+      'Accept': 'application/rss+xml, application/xml, text/xml',
+    };
+
+    const news = [];
+    for (const feed of feeds) {
+      try {
+        const r = await fetch(feed.url, { headers, signal: AbortSignal.timeout(8000) });
+        if (!r.ok) continue;
+        const xml = await r.text();
+        // <item> 파싱
+        const items = [...xml.matchAll(/<item[\s\S]*?<\/item>/gi)];
+        for (const [itemStr] of items) {
+          const title   = (itemStr.match(/<title[^>]*><!\[CDATA\[([\s\S]*?)\]\]><\/title>/)
+                        ?? itemStr.match(/<title[^>]*>([\s\S]*?)<\/title>/))?.[1]?.trim() ?? '';
+          const desc    = (itemStr.match(/<description[^>]*><!\[CDATA\[([\s\S]*?)\]\]><\/description>/)
+                        ?? itemStr.match(/<description[^>]*>([\s\S]*?)<\/description>/))?.[1]
+                           ?.replace(/<[^>]+>/g, '').trim().slice(0, 120) ?? '';
+          const link    = (itemStr.match(/<link[^>]*>([\s\S]*?)<\/link>/)
+                        ?? itemStr.match(/<link[^>]*\/?>([^<]+)/))?.[1]?.trim() ?? '';
+          const pubDate = (itemStr.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/))?.[1]?.trim() ?? '';
+
+          const text = (title + ' ' + desc).toLowerCase();
+          const match = KEYWORDS.some(k => text.includes(k));
+          if (match && title) {
+            news.push({ src: feed.src, title, desc, link, pubDate });
+            if (news.filter(n => n.src === feed.src).length >= 4) break;
+          }
+        }
+      } catch {}
+    }
+    return news.slice(0, 8);
+  }
+
   try {
     const results = await Promise.allSettled([
       ...symbols.map(s => fetchQuote(s)),
       fetchFearGreed(),
+      fetchNews(),
     ]);
 
-    const [sp500, ndx, tqqq, fngu, soxl, vix, gold, tnx, wti, fg] =
+    const [sp500, ndx, tqqq, fngu, soxl, vix, gold, tnx, wti, fg, news] =
       results.map(r => r.status === 'fulfilled' ? r.value : null);
 
     res.status(200).json({
       sp500, ndx, tqqq, fngu, soxl, vix, gold, tnx, wti,
       fg,
+      news: news ?? [],
       updatedAt: new Date().toISOString(),
     });
   } catch (err) {
