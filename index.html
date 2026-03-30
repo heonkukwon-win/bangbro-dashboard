@@ -120,6 +120,19 @@ input[type=range]{width:100%;accent-color:var(--go);cursor:pointer;}
 .yh-bar-wrap{flex:1;height:6px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden;}
 .yh-bar{height:100%;border-radius:3px;}
 .yh-val{font-family:'IBM Plex Mono',monospace;font-size:10px;min-width:36px;text-align:right;}
+/* ── 뉴스 카드 ── */
+.news-item{padding:10px 0;border-bottom:1px solid var(--bd);}
+.news-item:last-child{border-bottom:none;}
+.news-src{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;
+  padding:2px 7px;border-radius:4px;margin-bottom:5px;letter-spacing:1px;}
+.news-src.cnn{background:rgba(229,62,62,.2);color:#FCA5A5;border:1px solid rgba(229,62,62,.3);}
+.news-src.wsj{background:rgba(59,130,246,.15);color:#93C5FD;border:1px solid rgba(59,130,246,.3);}
+.news-title{font-size:12px;font-weight:700;color:var(--wh);line-height:1.45;margin-bottom:3px;}
+.news-title a{color:inherit;text-decoration:none;}
+.news-title a:hover{color:var(--gL);}
+.news-desc{font-size:10px;color:var(--gY);line-height:1.5;}
+.news-date{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--gy);margin-top:3px;}
+.news-empty{text-align:center;padding:16px;font-size:11px;color:var(--gY);}
 /* ── KPI 클릭 카드 ── */
 .kpi-card{cursor:pointer;position:relative;transition:transform .2s,box-shadow .2s,border-color .3s;}
 .kpi-card.active{border-color:var(--gL) !important;box-shadow:0 0 0 2px rgba(240,192,96,.25),0 8px 32px rgba(0,0,0,.4);}
@@ -182,6 +195,7 @@ input[type=range]{width:100%;accent-color:var(--go);cursor:pointer;}
     <div class="card" id="signal-card"></div>
     <div>
       <div class="card mg" id="etf-card"></div>
+      <div class="card mg" id="news-card"></div>
       <div class="card" id="alloc-card"></div>
     </div>
   </div>
@@ -344,7 +358,7 @@ function miniLineChart(values, labels, color, refLine) {
 // ══════════════════════════════════════════════════════════════
 // 전역 상태
 // ══════════════════════════════════════════════════════════════
-let D={}, FG=null;
+let D={}, FG=null, NEWS=[];
 
 // ══════════════════════════════════════════════════════════════
 // 데이터 로드 & 렌더
@@ -357,6 +371,7 @@ async function loadData() {
     D={sp500:data.sp500,ndx:data.ndx,tqqq:data.tqqq,
        fngu:data.fngu,soxl:data.soxl,vix:data.vix,
        gold:data.gold,tnx:data.tnx,wti:data.wti};
+    NEWS=data.news??[];
     FG=data.fg;
     document.getElementById('update-time').textContent=nowStr();
     document.getElementById('live-badge').className='live-badge';
@@ -828,6 +843,34 @@ function renderT1() {
       ${e.data?.high52&&e.data?.low52?`<div class="gb" style="margin-top:4px;"><div class="gf" style="width:${(((e.data.current-e.data.low52)/(e.data.high52-e.data.low52))*100).toFixed(0)}%;background:var(--bl);"></div></div>`:''}
     </div>`).join('')+
     (!ndxOk?'<div class="wb" style="margin-top:10px;font-size:11px;">🔴 200일선 하위 — 레버리지 ETF 보유 금지</div>':'');
+
+  // 뉴스 카드
+  const newsEl = document.getElementById('news-card');
+  if (newsEl) {
+    if (!NEWS || NEWS.length === 0) {
+      newsEl.innerHTML = `
+        <div class="ct">📡 속보 — 미국·이란 / 중동 뉴스 (CNN · WSJ)</div>
+        <div class="news-empty">관련 뉴스를 불러오는 중이거나 현재 주요 속보가 없습니다.</div>`;
+    } else {
+      newsEl.innerHTML = `
+        <div class="ct">📡 속보 — 미국·이란 / 중동 뉴스 (CNN · WSJ)</div>` +
+        NEWS.map(n => {
+          const srcClass = n.src === 'CNN' ? 'cnn' : 'wsj';
+          const d = n.pubDate ? new Date(n.pubDate) : null;
+          const dateStr = d && !isNaN(d)
+            ? `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+            : '';
+          return `<div class="news-item">
+            <span class="news-src ${srcClass}">${n.src}</span>
+            <div class="news-title">
+              ${n.link ? `<a href="${n.link}" target="_blank" rel="noopener">${n.title}</a>` : n.title}
+            </div>
+            ${n.desc ? `<div class="news-desc">${n.desc}${n.desc.length>=119?'…':''}</div>` : ''}
+            ${dateStr ? `<div class="news-date">${dateStr}</div>` : ''}
+          </div>`;
+        }).join('');
+    }
+  }
 
   // 자산배분
   const allocs=[{a:'달러 예금/MMF',r:'60%',amt:'6억',ok:true},{a:'GLD 금 ETF',r:'20%',amt:'2억',ok:true},
