@@ -231,10 +231,10 @@ input[type=range]{width:100%;accent-color:var(--go);cursor:pointer;}
   <div class="g2 mg">
     <div class="card" style="text-align:center;">
       <div class="ct">진입 신호 점수</div>
-      <div class="bn" id="sig-score" style="font-size:64px;color:var(--re);">0/6</div>
+      <div class="bn" id="sig-score" style="font-size:64px;color:var(--re);">0/7</div>
       <div class="sm" style="margin-top:6px;">클릭으로 직접 체크</div>
       <div style="margin-top:10px;" id="sig-bars"></div>
-      <div class="gb2" style="margin-top:12px;font-size:11px;">3개 이상 → 소량 진입 / 6개 모두 → 본격 진입</div>
+      <div class="gb2" style="margin-top:12px;font-size:11px;">4개 이상 → 소량 진입 / 7개 모두 → 본격 진입</div>
     </div>
     <div class="card" style="text-align:center;" id="verdict-card">
       <div class="ct">진입 판단</div>
@@ -407,30 +407,52 @@ function buildDetailHTML(idx) {
 
   // ── 0: 진입 신호 ──────────────────────────────────────────
   if (idx === 0) {
+    const fgOk  = FG!=null && FG < 20;
+    const wtiOk2 = D.wti?.current != null && D.wti.current < 95;
     const checks = [
-      {l:'S&P500 > 200일선', ok: D.sp500?.current > D.sp500?.ma200},
-      {l:'NDX > 200일선',    ok: ndxOk},
-      {l:'10Y < 4.5%',       ok: tnxOk},
-      {l:'VIX < 20',         ok: vixOk},
+      {l:'S&P500 > 200일선',    ok: D.sp500?.current > D.sp500?.ma200,
+       v: D.sp500?.current?.toLocaleString()??'—'},
+      {l:'NDX > 200일선',       ok: ndxOk,
+       v: D.ndx?.current?.toLocaleString()??'—'},
+      {l:'10Y < 4.5%',          ok: tnxOk,
+       v: `${D.tnx?.current?.toFixed(3)??'—'}%`},
+      {l:'VIX < 20',            ok: vixOk,
+       v: fmt2(D.vix?.current)},
+      {l:'Fear & Greed < 20',   ok: fgOk,
+       v: `${FG??'—'} (${FG<20?'극단공포':FG<40?'공포':FG<60?'중립':'탐욕'})`},
+      {l:'WTI < $95',           ok: wtiOk2,
+       v: `$${fmt2(D.wti?.current)}`},
     ];
     const okCnt = checks.filter(c=>c.ok).length;
-    const score = Math.round(okCnt/6*100);
+    const total = checks.length;
+    const score = Math.round(okCnt/total*100);
+    const scoreColor = score>=67?'var(--gr)':score>=33?'var(--or)':'var(--re)';
     return `
       <div class="dp-header">
         <div><div class="dp-title">진입 신호 종합</div>
-          <div class="dp-value" style="color:${okCnt>2?'var(--gr)':'var(--re)'};">${score}%</div>
-          <div class="sm">${okCnt}/6 충족</div>
+          <div class="dp-value" style="color:${scoreColor};">${score}%</div>
+          <div class="sm">${okCnt}/${total} 충족</div>
         </div>${closeBtn}
+      </div>
+      <!-- 진행 바 -->
+      <div class="gb" style="height:10px;margin:4px 0 16px;">
+        <div class="gf" style="width:${score}%;background:${scoreColor};"></div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
         ${checks.map(c=>`
-          <div style="background:var(--nv3);border-radius:8px;padding:10px 14px;
+          <div style="background:var(--nv3);border-radius:8px;padding:11px 14px;
             border:1px solid ${c.ok?'rgba(34,197,94,.3)':'rgba(229,62,62,.3)'};">
-            <div style="font-size:10px;color:var(--gY);margin-bottom:4px;">${c.l}</div>
-            <div style="font-size:18px;">${c.ok?'✅':'❌'}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+              <div style="font-size:10px;color:var(--gY);">${c.l}</div>
+              <div style="font-size:15px;">${c.ok?'✅':'❌'}</div>
+            </div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;
+              color:${c.ok?'var(--gr)':'var(--re)'};">${c.v}</div>
           </div>`).join('')}
       </div>
-      <div class="gb2" style="margin-top:14px;font-size:11px;">3개 이상 충족 시 소량 진입 고려 / 6개 모두 충족 시 본격 진입</div>`;
+      <div class="gb2" style="margin-top:14px;font-size:11px;">
+        3개 이상 충족 시 소량 진입 고려 &nbsp;/&nbsp; 6개 모두 충족 시 본격 진입
+      </div>`;
   }
 
   // ── 1: Fear & Greed ───────────────────────────────────────
@@ -653,10 +675,17 @@ function renderT1() {
 
   // KPI 카드 5개
   const kpis=[
-    {ct:'진입 신호', val:`${Math.round(([sp5Ok,ndxOk,tnxOk,vixOk].filter(Boolean).length/6)*100)}%`,
-     sub:`${[sp5Ok,ndxOk,tnxOk,vixOk].filter(Boolean).length}/6 충족`,
-     color:ndxOk?'gr':'re', bar:Math.round(([sp5Ok,ndxOk,tnxOk,vixOk].filter(Boolean).length/6)*100),
-     barC:ndxOk?'var(--gr)':'var(--re)', bdg:ndxOk?'bdg-g':'bdg-r', bdgTxt:ndxOk?'진입 검토':'현금 보유'},
+    (()=>{
+      const fgOk = FG!=null && FG < 20;
+      const allConds = [sp5Ok, ndxOk, tnxOk, vixOk, fgOk, wtiOk];
+      const okCnt = allConds.filter(Boolean).length;
+      const total = allConds.length;
+      const score = Math.round(okCnt/total*100);
+      return {ct:'진입 신호', val:`${score}%`,
+        sub:`${okCnt}/${total} 충족`,
+        color:score>50?'gr':'re', bar:score,
+        barC:score>50?'var(--gr)':'var(--re)', bdg:score>50?'bdg-g':'bdg-r', bdgTxt:score>50?'진입 검토':'현금 보유'};
+    })(),
     {ct:'Fear & Greed', val:FG??'—', sub:FG<20?'극단적 공포':FG<40?'공포':FG<60?'중립':'탐욕',
      color:'or', bar:FG??0, barC:'linear-gradient(90deg,var(--gr),var(--or),var(--re))', bdg:'bdg-y', bdgTxt:'CNN 지수'},
     {ct:'NDX 200일선', val:D.ndx?.current?.toLocaleString()??'—', sub:`200MA: ${D.ndx?.ma200?.toLocaleString()??'—'}`,
@@ -868,6 +897,7 @@ function renderT3() {
     {k:'s4',lbl:'이란 협상 타결 or 호르무즈 재개',     desc:'근본 원인 해소 — 뉴스 직접 확인',   cur:'수동 확인 필요',                                     g:30,c:'var(--bl)'},
     {k:'s5',lbl:'VIX 20 이하 하락',                   desc:`현재 VIX ${fmt2(D.vix?.current)}`,  cur:`${fmt2(D.vix?.current)} (${D.vix?.current<20?'충족!':'미충족'})`,g:Math.min(100,(D.vix?.current??25)*2),c:'var(--bl)'},
     {k:'s6',lbl:'10년물 국채 금리 4.5% 이하 안정',    desc:`현재 ${tnxCur.toFixed(3)}%`,        cur:`${tnxCur.toFixed(3)}% (${tnxCur<4.5?'충족!':'미충족'})`,g:Math.round((tnxCur-3.5)/(5.5-3.5)*100),c:tnxCur>=4.5?'var(--re)':'var(--gr)'},
+    {k:'s7',lbl:'WTI 유가 $95 이하 안정',               desc:`현재 $${fmt2(D.wti?.current)} — 에너지·인플레 리스크`,cur:`$${fmt2(D.wti?.current)} (${D.wti?.current<95?'충족!':'미충족'})`,g:D.wti?.current?Math.min(99,(D.wti.current/130*100).toFixed(0)):50,c:D.wti?.current<95?'var(--gr)':'var(--or)'},
   ];
   document.getElementById('sig-list').innerHTML=sigs.map(s=>`
     <div class="ci" onclick="toggleSig('${s.k}')">
@@ -890,13 +920,13 @@ function toggleSig(k){
 function updateSigScore(){
   const score=Object.values(sigChecked).filter(Boolean).length;
   const el=document.getElementById('sig-score');
-  el.textContent=`${score}/6`;
-  el.style.color=score>=5?'var(--gr)':score>=3?'var(--or)':score>=1?'var(--bl)':'var(--re)';
-  document.getElementById('sig-bars').innerHTML=[0,1,2,3,4,5].map(i=>`<div style="height:5px;border-radius:3px;margin-bottom:3px;background:${i<score?'var(--gr)':'rgba(255,255,255,.1)'}"></div>`).join('');
+  el.textContent=`${score}/7`;
+  el.style.color=score>=6?'var(--gr)':score>=4?'var(--or)':score>=2?'var(--bl)':'var(--re)';
+  document.getElementById('sig-bars').innerHTML=[0,1,2,3,4,5,6].map(i=>`<div style="height:5px;border-radius:3px;margin-bottom:3px;background:${i<score?'var(--gr)':'rgba(255,255,255,.1)'}"></div>`).join('');
   const verdicts=[
-    {min:5,ic:'🚀',t:'진입 가능!',d:'핵심 신호 충족<br>소액 분할 진입 검토',c:'var(--gr)',bg:'rgba(34,197,94,.1)',bc:'rgba(34,197,94,.3)'},
-    {min:3,ic:'⚡',t:'준비 단계',d:'일부 신호 충족<br>200일선 돌파 대기',c:'var(--or)',bg:'rgba(249,115,22,.1)',bc:'rgba(249,115,22,.3)'},
-    {min:1,ic:'⏳',t:'대기 중',d:'신호 수집 중<br>현금 보유 유지',c:'var(--bl)',bg:'rgba(59,130,246,.1)',bc:'rgba(59,130,246,.3)'},
+    {min:6,ic:'🚀',t:'진입 가능!',d:'핵심 신호 충족<br>소액 분할 진입 검토',c:'var(--gr)',bg:'rgba(34,197,94,.1)',bc:'rgba(34,197,94,.3)'},
+    {min:4,ic:'⚡',t:'준비 단계',d:'일부 신호 충족<br>200일선 돌파 대기',c:'var(--or)',bg:'rgba(249,115,22,.1)',bc:'rgba(249,115,22,.3)'},
+    {min:2,ic:'⏳',t:'대기 중',d:'신호 수집 중<br>현금 보유 유지',c:'var(--bl)',bg:'rgba(59,130,246,.1)',bc:'rgba(59,130,246,.3)'},
     {min:0,ic:'🛡️',t:'현금 보유',d:'진입 신호 없음<br>현금이 무기입니다',c:'var(--gY)',bg:'rgba(100,116,139,.15)',bc:'rgba(100,116,139,.3)'},
   ];
   const v=verdicts.find(v=>score>=v.min);
