@@ -849,11 +849,11 @@ function renderT1() {
   if (newsEl) {
     if (!NEWS || NEWS.length === 0) {
       newsEl.innerHTML = `
-        <div class="ct">📡 속보 — 미국·이란 / 중동 뉴스 (CNN · WSJ)</div>
-        <div class="news-empty">관련 뉴스를 불러오는 중이거나 현재 주요 속보가 없습니다.</div>`;
+        <div class="ct">🌐 최신 뉴스 (CNN · WSJ)</div>
+        <div class="news-empty">뉴스를 불러오는 중입니다. 잠시 후 다시 확인해 주세요.</div>`;
     } else {
       newsEl.innerHTML = `
-        <div class="ct">📡 속보 — 미국·이란 / 중동 뉴스 (CNN · WSJ)</div>` +
+        <div class="ct">🌐 최신 뉴스 (CNN · WSJ)</div>` +
         NEWS.map(n => {
           const srcClass = n.src === 'CNN' ? 'cnn' : 'wsj';
           const d = n.pubDate ? new Date(n.pubDate) : null;
