@@ -110,13 +110,11 @@ export default async function handler(req, res) {
     return null;
   }
 
-  // 뉴스 RSS 파싱 (이란·중동 관련 키워드 필터)
+  // 최신 뉴스 (CNN · WSJ RSS — 키워드 필터 없음, 최신순)
   async function fetchNews() {
-    const KEYWORDS = ['iran','tehran','hormuz','middle east','nuclear','sanction',
-                      '이란','호르무즈','중동','핵','제재','원유','oil'];
     const feeds = [
-      { src: 'CNN',  url: 'https://rss.cnn.com/rss/edition_world.rss' },
-      { src: 'WSJ',  url: 'https://feeds.a.dj.com/rss/RSSWorldNews.xml' },
+      { src: 'CNN', url: 'https://rss.cnn.com/rss/edition_world.rss' },
+      { src: 'WSJ', url: 'https://feeds.a.dj.com/rss/RSSWorldNews.xml' },
     ];
     const headers = {
       'User-Agent': 'Mozilla/5.0 (compatible; newsbot/1.0)',
@@ -129,27 +127,26 @@ export default async function handler(req, res) {
         const r = await fetch(feed.url, { headers, signal: AbortSignal.timeout(8000) });
         if (!r.ok) continue;
         const xml = await r.text();
-        // <item> 파싱
-        const items = [...xml.matchAll(/<item[\s\S]*?<\/item>/gi)];
-        for (const [itemStr] of items) {
-          const title   = (itemStr.match(/<title[^>]*><!\[CDATA\[([\s\S]*?)\]\]><\/title>/)
-                        ?? itemStr.match(/<title[^>]*>([\s\S]*?)<\/title>/))?.[1]?.trim() ?? '';
-          const desc    = (itemStr.match(/<description[^>]*><!\[CDATA\[([\s\S]*?)\]\]><\/description>/)
-                        ?? itemStr.match(/<description[^>]*>([\s\S]*?)<\/description>/))?.[1]
-                           ?.replace(/<[^>]+>/g, '').trim().slice(0, 120) ?? '';
-          const link    = (itemStr.match(/<link[^>]*>([\s\S]*?)<\/link>/)
-                        ?? itemStr.match(/<link[^>]*\/?>([^<]+)/))?.[1]?.trim() ?? '';
-          const pubDate = (itemStr.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/))?.[1]?.trim() ?? '';
 
-          const text = (title + ' ' + desc).toLowerCase();
-          const match = KEYWORDS.some(k => text.includes(k));
-          if (match && title) {
-            news.push({ src: feed.src, title, desc, link, pubDate });
-            if (news.filter(n => n.src === feed.src).length >= 4) break;
-          }
+        const items = [...xml.matchAll(/<item[\s\S]*?<\/item>/gi)];
+        let count = 0;
+        for (const [itemStr] of items) {
+          if (count >= 4) break;
+          const title = (itemStr.match(/<title[^>]*><!\[CDATA\[([\s\S]*?)\]\]><\/title>/)
+                      ?? itemStr.match(/<title[^>]*>([\s\S]*?)<\/title>/))?.[1]?.trim() ?? '';
+          const desc  = (itemStr.match(/<description[^>]*><!\[CDATA\[([\s\S]*?)\]\]><\/description>/)
+                      ?? itemStr.match(/<description[^>]*>([\s\S]*?)<\/description>/))?.[1]
+                         ?.replace(/<[^>]+>/g, '').trim().slice(0, 120) ?? '';
+          const link  = (itemStr.match(/<link[^>]*>([\s\S]*?)<\/link>/)
+                      ?? itemStr.match(/<guid[^>]*>([\s\S]*?)<\/guid>/))?.[1]?.trim() ?? '';
+          const pubDate = (itemStr.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/))?.[1]?.trim() ?? '';
+          if (title) { news.push({ src: feed.src, title, desc, link, pubDate }); count++; }
         }
       } catch {}
     }
+
+    // pubDate 기준 최신순 정렬 후 8개
+    news.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
     return news.slice(0, 8);
   }
 
