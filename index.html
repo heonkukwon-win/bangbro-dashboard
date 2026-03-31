@@ -849,23 +849,25 @@ function renderT1() {
   if (newsEl) {
     if (!NEWS || NEWS.length === 0) {
       newsEl.innerHTML = `
-        <div class="ct">🌐 최신 뉴스 (CNN · WSJ)</div>
-        <div class="news-empty">뉴스를 불러오는 중입니다. 잠시 후 다시 확인해 주세요.</div>`;
+        <div class="ct">📰 미국·이란·중동 최신 뉴스 (CNN — 한글 번역)</div>
+        <div class="news-empty">관련 뉴스를 불러오는 중이거나 현재 관련 기사가 없습니다.</div>`;
     } else {
       newsEl.innerHTML = `
-        <div class="ct">🌐 최신 뉴스 (CNN · WSJ)</div>` +
+        <div class="ct">📰 미국·이란·중동 최신 뉴스 (CNN — 한글 번역)</div>` +
         NEWS.map(n => {
-          const srcClass = n.src === 'CNN' ? 'cnn' : 'wsj';
           const d = n.pubDate ? new Date(n.pubDate) : null;
           const dateStr = d && !isNaN(d)
             ? `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
             : '';
+          const titleKo = n.titleKo || n.title;
+          const descKo  = n.descKo  || n.desc;
           return `<div class="news-item">
-            <span class="news-src ${srcClass}">${n.src}</span>
+            <span class="news-src cnn">CNN</span>
             <div class="news-title">
-              ${n.link ? `<a href="${n.link}" target="_blank" rel="noopener">${n.title}</a>` : n.title}
+              ${n.link ? `<a href="${n.link}" target="_blank" rel="noopener">${titleKo}</a>` : titleKo}
             </div>
-            ${n.desc ? `<div class="news-desc">${n.desc}${n.desc.length>=119?'…':''}</div>` : ''}
+            ${descKo ? `<div class="news-desc">${descKo}${descKo.length>=119?'…':''}</div>` : ''}
+            <div style="margin-top:4px;font-size:9px;color:var(--gy);font-family:'IBM Plex Mono',monospace;font-style:italic;">${n.title}</div>
             ${dateStr ? `<div class="news-date">${dateStr}</div>` : ''}
           </div>`;
         }).join('');
