@@ -211,8 +211,13 @@ input[type=range]{width:100%;accent-color:var(--go);cursor:pointer;}
       <div class="sw"><div class="sw-label"><span>FNGU 비중</span><span id="s-fpct-v" style="color:var(--gL);font-family:'IBM Plex Mono',monospace">15%</span></div><input type="range" id="s-fpct" min="0" max="40" step="5" value="15" oninput="calcSim()"/></div>
       <div class="sw"><div class="sw-label"><span>나스닥 수익률</span><span id="s-ndxr-v" style="color:var(--gL);font-family:'IBM Plex Mono',monospace">+80%</span></div><input type="range" id="s-ndxr" min="-50" max="300" step="10" value="80" oninput="calcSim()"/></div>
       <div class="sw"><div class="sw-label"><span>투자 기간</span><span id="s-yrs-v" style="color:var(--gL);font-family:'IBM Plex Mono',monospace">3년</span></div><input type="range" id="s-yrs" min="1" max="10" step="1" value="3" oninput="calcSim()"/></div>
-      <div class="row"><span class="row-l">QQQ 비중 (자동)</span><span id="s-qpct-v" style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--gL)">35%</span></div>
-      <div class="ib" style="margin-top:12px;font-size:11px;">TQQQ ≈ 나스닥×2.7배 / FNGU ≈ 나스닥×3.2배 (음의복리 감안)</div>
+      <div class="sw">
+        <div class="sw-label"><span>QQQ 비중 (자동)</span><span id="s-qpct-v" style="color:var(--gL);font-family:'IBM Plex Mono',monospace">35%</span></div>
+        <div style="height:6px;border-radius:3px;background:var(--nv3);overflow:hidden;margin-top:2px;">
+          <div id="s-qpct-bar" style="height:100%;border-radius:3px;background:var(--bl);transition:width .3s;width:35%;"></div>
+        </div>
+      </div>
+      <div class="ib" style="margin-top:12px;font-size:11px;">TQQQ ≈ 나스닥×2.7배 / FNGU ≈ 나스닥×3.2배 / QQQ ≈ 나스닥×0.95배 (음의복리 감안)</div>
       <div id="sim-live-price" style="margin-top:8px;background:var(--nv3);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--gY);"></div>
     </div>
     <div>
@@ -222,7 +227,9 @@ input[type=range]{width:100%;accent-color:var(--go);cursor:pointer;}
           <div><div class="sm">최종 자산</div><div class="bn gr" id="sim-total">—</div></div>
           <div style="text-align:right;"><div class="sm">총 수익률</div><div id="sim-rate" style="font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:700;">—</div></div>
         </div>
-        <div style="background:linear-gradient(135deg,var(--nv3),rgba(201,148,58,.1));border:1px solid rgba(201,148,58,.3);border-radius:10px;padding:16px;margin-top:14px;" id="sim-detail"></div>
+        <!-- 연도별 성장 차트 -->
+        <div id="sim-chart" style="margin:14px 0 10px;"></div>
+        <div style="background:linear-gradient(135deg,var(--nv3),rgba(201,148,58,.1));border:1px solid rgba(201,148,58,.3);border-radius:10px;padding:16px;" id="sim-detail"></div>
       </div>
       <div class="card">
         <div class="ct">폭락 시나리오 (200일선 무시 진입 시)</div>
@@ -893,32 +900,129 @@ function renderT1() {
 // 탭2: 시뮬레이터
 // ══════════════════════════════════════════════════════════════
 function calcSim() {
-  const cap=+document.getElementById('s-cap').value;
-  const tpct=+document.getElementById('s-tpct').value;
-  const fpct=+document.getElementById('s-fpct').value;
-  const ndxR=+document.getElementById('s-ndxr').value;
-  const yrs=+document.getElementById('s-yrs').value;
-  const qpct=100-tpct-fpct;
-  document.getElementById('s-cap-v').textContent=fmtW(cap);
-  document.getElementById('s-tpct-v').textContent=`${tpct}% (${fmtW(cap*tpct/100)})`;
-  document.getElementById('s-fpct-v').textContent=`${fpct}% (${fmtW(cap*fpct/100)})`;
-  document.getElementById('s-ndxr-v').textContent=`+${ndxR}%`;
-  document.getElementById('s-yrs-v').textContent=`${yrs}년`;
-  document.getElementById('s-qpct-v').textContent=`${qpct}% (${fmtW(cap*qpct/100)})`;
-  const tAmt=cap*tpct/100, fAmt=cap*fpct/100, qAmt=cap*qpct/100;
-  const ftT=tAmt*(1+ndxR*2.7/100), ftF=fAmt*(1+ndxR*3.2/100), ftQ=qAmt*(1+ndxR*0.95/100);
-  const total=ftT+ftF+ftQ, totR=((total-cap)/cap*100).toFixed(1);
-  const bTotal=tAmt*0.45+fAmt*0.35+qAmt*0.80, bR=((bTotal-cap)/cap*100).toFixed(1);
-  document.getElementById('sim-total').textContent=fmtW(total);
-  document.getElementById('sim-rate').style.color=total>cap?'var(--gr)':'var(--re)';
-  document.getElementById('sim-rate').textContent=`${totR>0?'+':''}${totR}%`;
-  document.getElementById('sim-detail').innerHTML=[['원금',fmtW(cap)],['TQQQ 수익',fmtW(ftT-tAmt)],['FNGU 수익',fmtW(ftF-fAmt)],['QQQ 수익',fmtW(ftQ-qAmt)],['최종 합계',fmtW(total)]].map(([l,v])=>`
+  const cap  = +document.getElementById('s-cap').value;
+  const tpct = +document.getElementById('s-tpct').value;
+  const fpct = +document.getElementById('s-fpct').value;
+  const ndxR = +document.getElementById('s-ndxr').value;
+  const yrs  = +document.getElementById('s-yrs').value;
+  const qpct = 100 - tpct - fpct;
+
+  // 슬라이더 라벨 업데이트
+  document.getElementById('s-cap-v').textContent  = fmtW(cap);
+  document.getElementById('s-tpct-v').textContent = `${tpct}% (${fmtW(cap*tpct/100)})`;
+  document.getElementById('s-fpct-v').textContent = `${fpct}% (${fmtW(cap*fpct/100)})`;
+  document.getElementById('s-ndxr-v').textContent = `+${ndxR}%`;
+  document.getElementById('s-yrs-v').textContent  = `${yrs}년`;
+  document.getElementById('s-qpct-v').textContent = `${qpct}% (${fmtW(cap*qpct/100)})`;
+  const qbar = document.getElementById('s-qpct-bar');
+  if (qbar) qbar.style.width = `${Math.max(2, qpct)}%`;
+
+  const tAmt = cap * tpct / 100;
+  const fAmt = cap * fpct / 100;
+  const qAmt = cap * qpct / 100;
+
+  // ── 연복리 수익률 적용 (투자 기간 반영) ──────────────────────
+  // 나스닥 연간 수익률 = ndxR% (입력값은 기간 내 총 수익률이 아닌 연간 기준)
+  // 레버리지는 음의 복리 감쇠 계수 적용
+  const ndxAnnual = ndxR / 100;                      // 나스닥 연간 수익률
+  const tAnnual   = ndxAnnual * 2.7 - 0.015 * yrs;  // TQQQ: 3배 레버리지 + 연간 추가 감쇠
+  const fAnnual   = ndxAnnual * 3.2 - 0.020 * yrs;  // FNGU: 3.2배 + 감쇠
+  const qAnnual   = ndxAnnual * 0.95;                // QQQ: 거의 그대로
+
+  // 복리 최종값
+  const ftT  = tAmt * Math.pow(1 + tAnnual, yrs);
+  const ftF  = fAmt * Math.pow(1 + fAnnual, yrs);
+  const ftQ  = qAmt * Math.pow(1 + qAnnual, yrs);
+  const total = ftT + ftF + ftQ;
+  const totR  = ((total - cap) / cap * 100).toFixed(1);
+
+  // 폭락 시나리오 (기간 무관 — 200일선 무시 진입 직후 손실)
+  const bTotal = tAmt * 0.45 + fAmt * 0.35 + qAmt * 0.80;
+  const bR = ((bTotal - cap) / cap * 100).toFixed(1);
+
+  // ── 연도별 성장 차트 ──────────────────────────────────────────
+  const yearData = [];
+  for (let y = 0; y <= yrs; y++) {
+    const vT = tAmt * Math.pow(1 + tAnnual, y);
+    const vF = fAmt * Math.pow(1 + fAnnual, y);
+    const vQ = qAmt * Math.pow(1 + qAnnual, y);
+    yearData.push({ y, total: vT + vF + vQ });
+  }
+  const maxV = Math.max(...yearData.map(d => d.total));
+  const minV = cap * 0.8; // 차트 최솟값
+
+  const W = 300, H = 80, PAD = 4;
+  const pts = yearData.map((d, i) => {
+    const x = PAD + (i / Math.max(yrs, 1)) * (W - PAD * 2);
+    const y = H - PAD - ((d.total - minV) / (maxV - minV + 1)) * (H - PAD * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const lineColor = total > cap ? '#22C55E' : '#EF4444';
+  const areaPath = `M${pts[0]} ${pts.slice(1).map(p=>'L'+p).join(' ')} L${(W-PAD).toFixed(1)},${H-PAD} L${PAD},${H-PAD} Z`;
+  const lastPt = pts[pts.length - 1].split(',');
+
+  // 기준선 (원금)
+  const baseY = (H - PAD - ((cap - minV) / (maxV - minV + 1)) * (H - PAD * 2)).toFixed(1);
+
+  const chartHTML = `
+    <div style="font-size:9px;color:var(--gY);font-family:'IBM Plex Mono',monospace;letter-spacing:1px;margin-bottom:4px;">연도별 자산 성장</div>
+    <div style="position:relative;">
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:80px;overflow:visible;">
+        <defs>
+          <linearGradient id="simGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${lineColor}" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="${lineColor}" stop-opacity="0.02"/>
+          </linearGradient>
+        </defs>
+        <!-- 원금 기준선 -->
+        <line x1="${PAD}" y1="${baseY}" x2="${W-PAD}" y2="${baseY}"
+          stroke="rgba(255,255,255,0.2)" stroke-width="1" stroke-dasharray="4,3"/>
+        <!-- 면적 -->
+        <path d="${areaPath}" fill="url(#simGrad)"/>
+        <!-- 라인 -->
+        <polyline points="${pts.join(' ')}" fill="none" stroke="${lineColor}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 현재 점 -->
+        <circle cx="${lastPt[0]}" cy="${lastPt[1]}" r="3.5" fill="${lineColor}" stroke="var(--nv2)" stroke-width="1.5"/>
+      </svg>
+      <!-- 연도 레이블 -->
+      <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--gY);margin-top:2px;">
+        <span>0년</span>
+        ${yrs >= 3 ? `<span>${Math.round(yrs/2)}년</span>` : ''}
+        <span style="color:${lineColor};font-weight:700;">${yrs}년 → ${fmtW(Math.round(total))}</span>
+      </div>
+    </div>
+    <!-- 연도별 수익률 표 -->
+    <div style="margin-top:10px;display:grid;grid-template-columns:repeat(${Math.min(yrs,5)},1fr);gap:4px;">
+      ${yearData.filter((_, i) => i > 0 && (yrs <= 5 || i % Math.ceil(yrs/5) === 0 || i === yrs)).map(d => {
+        const r = ((d.total - cap) / cap * 100).toFixed(0);
+        const c = d.total >= cap ? '#22C55E' : '#EF4444';
+        return `<div style="background:var(--nv3);border-radius:6px;padding:5px 4px;text-align:center;">
+          <div style="font-size:9px;color:var(--gY);">${d.y}년</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;color:${c};">${r>0?'+':''}${r}%</div>
+          <div style="font-size:8px;color:var(--gy);">${fmtW(Math.round(d.total))}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+
+  document.getElementById('sim-chart').innerHTML = chartHTML;
+
+  // 결과 업데이트
+  document.getElementById('sim-total').textContent = fmtW(Math.round(total));
+  document.getElementById('sim-rate').style.color  = total > cap ? 'var(--gr)' : 'var(--re)';
+  document.getElementById('sim-rate').textContent  = `${totR > 0 ? '+' : ''}${totR}%`;
+  document.getElementById('sim-detail').innerHTML  = [
+    ['원금', fmtW(cap)],
+    [`TQQQ 수익 (연 ${(tAnnual*100).toFixed(1)}%)`, fmtW(Math.round(ftT - tAmt))],
+    [`FNGU 수익 (연 ${(fAnnual*100).toFixed(1)}%)`, fmtW(Math.round(ftF - fAmt))],
+    [`QQQ 수익 (연 ${(qAnnual*100).toFixed(1)}%)`,  fmtW(Math.round(ftQ - qAmt))],
+    ['최종 합계', fmtW(Math.round(total))],
+  ].map(([l, v]) => `
     <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bd);">
       <span style="font-size:12px;color:var(--gY);">${l}</span>
       <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;color:var(--gL);">${v}</span>
     </div>`).join('');
-  document.getElementById('sim-bad-total').textContent=fmtW(bTotal);
-  document.getElementById('sim-bad-rate').textContent=`${bR}%`;
+  document.getElementById('sim-bad-total').textContent = fmtW(bTotal);
+  document.getElementById('sim-bad-rate').textContent  = `${bR}%`;
   if(D.tqqq?.current) document.getElementById('sim-live-price').innerHTML=`실시간 — TQQQ: <span style="color:var(--gL);font-family:'IBM Plex Mono',monospace;">$${fmt2(D.tqqq.current)}</span>&nbsp;FNGU: <span style="color:var(--gL);font-family:'IBM Plex Mono',monospace;">$${fmt2(D.fngu?.current)}</span>`;
   const hists=[{ev:'2020.3 코로나',buy:'$8',ret:'+1,038%',c:'var(--gr)'},{ev:'2022.10 금리',buy:'$15',ret:'+287%',c:'var(--gr)'},{ev:'2025.4 관세',buy:'$17',ret:'+253%',c:'var(--gr)'},{ev:'현재',buy:`$${fmt2(D.tqqq?.current)}`,ret:'대기 중',c:'var(--or)'}];
   document.getElementById('hist-grid').innerHTML=hists.map(h=>`
